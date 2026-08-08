@@ -1,9 +1,14 @@
 import { TLAssetStore, uniqueId } from 'tldraw'
+import { MAX_UPLOAD_BYTES } from './constants'
 
 // How does our server handle assets like images and videos?
 export const multiplayerAssetStore: TLAssetStore = {
 	// to upload an asset, we...
 	async upload(_asset, file) {
+		if (file.size > MAX_UPLOAD_BYTES) {
+			throw new Error(`File too large. Max upload size is ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB.`)
+		}
+
 		// ...create a unique name & URL...
 		const id = uniqueId()
 		const objectName = `${id}-${file.name}`.replace(/[^a-zA-Z0-9.]/g, '-')
