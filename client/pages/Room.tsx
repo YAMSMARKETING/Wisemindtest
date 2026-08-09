@@ -1,32 +1,59 @@
 import { useSync } from '@tldraw/sync'
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Editor, Tldraw } from 'tldraw'
+import { Editor, Tldraw, react } from 'tldraw'
 import { isAdminFromSearch } from '../admin'
+import {
+	findOwnedReservedBlock,
+	getShapeOwnerKey,
+	isScrapbookTile,
+	placeBlockOnServer,
+	submitBlockOnServer,
+} from '../block'
 import { TLDRAW_LICENSE_KEY } from '../constants'
 import { clearBoard, exportBoardAsPdf, exportBoardAsPng } from '../exportBoard'
 import { getBookmarkPreview } from '../getBookmarkPreview'
 import { InstagramGate } from '../InstagramGate'
 import { getStoredInstagramHandle } from '../instagramHandle'
+import { apiClearLayout } from '../layoutApi'
 import { multiplayerAssetStore } from '../multiplayerAssetStore'
 import { getOrCreateOwnerId } from '../ownerId'
-import { isMovementChange } from '../shapeGuards'
 import { PAGE_BOUNDS } from '../pageGeometry'
-import { findOwnedReservedBlock, placeSampleBlock, shrinkBlockToContent } from '../block'
-import { communalComponents, communalOverrides } from '../uiConfig'
+import { setScrapbookOwnerKey } from '../scrapbookSession'
+import {
+	canUserMutateShape,
+	isInsideSubmittedBlock,
+	isMovementChange,
+} from '../shapeGuards'
+import { StickerTool } from '../StickerTool'
+import { MAX_IMAGES_PER_SUBMISSION, MAX_STICKERS_PER_SUBMISSION } from '../stickers'
+import { countOwnedMedia } from '../block'
+import { showToast } from '../toastBridge'
+import {
+	adminComponents,
+	adminOverrides,
+	communalComponents,
+	communalOverrides,
+} from '../uiConfig'
 
 export function Room() {
 	const { roomId } = useParams<{ roomId: string }>()
 	const ownerId = useMemo(() => getOrCreateOwnerId(), [])
 	const isAdmin = useMemo(() => isAdminFromSearch(), [])
-	const [instagramHandle, setInstagramHandle] = useState<string | null>(() => getStoredInstagramHandle())
+	const [instagramHandle, setInstagramHandle] = useState<string | null>(() =>
+		getStoredInstagramHandle()
+	)
 	const [editor, setEditor] = useState<Editor | null>(null)
 	const [exportStatus, setExportStatus] = useState<string | null>(null)
-
-	const [tileStatus, setTileStatus] = useState<string | null>(null)
+	const [status, setStatus] = useState<string | null>(null)
 
 	const identityRef = useRef({ ownerId, isAdmin, instagramHandle })
 	identityRef.current = { ownerId, isAdmin, instagramHandle }
+
+	useEffect(() => {
+		setScrapbookOwnerKey(ownerId)
+		return () => setScrapbookOwnerKey(null)
+	}, [ownerId])
 
 	const store = useSync({
 		uri: `${window.location.origin}/api/connect/${roomId}`,
@@ -57,69 +84,72 @@ export function Room() {
 		}
 	}, [editor])
 
-	const handleClearBoard = useCallback(() => {
-		if (!editor) return
+	const handleClearBoard = useCallback(async () => {
+		if (!editor || !roomId) return
 		if (!window.confirm('Clear the entire board for everyone?')) return
-		clearBoard(editor)
-		setExportStatus('Board cleared')
-	}, [editor])
-
-	const handlePlaceSampleBlock = useCallback(() => {
-		if (!editor || !instagramHandle) return
 		try {
-			const existing = findOwnedReservedBlock(editor, ownerId)
-			if (existing) {
-				editor.select(existing)
-				const bounds = editor.getShapePageBounds(existing)
-				if (bounds) editor.zoomToBounds(bounds, { inset: 64, animation: { duration: 220 } })
-				setTileStatus('You already have a reserved sample block')
-				return
-			}
-			placeSampleBlock(editor, {
+			await apiClearLayout(roomId)
+			clearBoard(editor)
+			setExportStatus('Board cleared')
+		} catch (error) {
+			console.error(error)
+			setExportStatus(error instanceof Error ? error.message : 'Clear failed')
+		}
+	}, [editor, roomId])
+
+	const handlePlaceBlock = useCallback(async () => {
+		if (!editor || !instagramHandle || !roomId) return
+		try {
+			const result = await placeBlockOnServer(editor, {
+				roomId,
 				ownerKey: ownerId,
 				displayName: `@${instagramHandle}`,
 			})
-			const stillThere = findOwnedReservedBlock(editor, ownerId)
-			if (!stillThere) {
-				setTileStatus('Block was removed after place — check ownership/cull guards')
+			if (result.alreadyHad) {
+				setStatus('You already have a reserved block')
 				return
 			}
-			setTileStatus('Sample block placed — compose inside, then Submit')
+			setStatus(
+				result.nudged
+					? 'Placed (nudged to clear spot) — compose, then Submit'
+					: 'Block reserved — compose inside, then Submit'
+			)
 		} catch (error) {
 			console.error(error)
-			setTileStatus(error instanceof Error ? error.message : 'Could not place block')
+			setStatus(error instanceof Error ? error.message : 'Could not place block')
 		}
-	}, [editor, instagramHandle, ownerId])
+	}, [editor, instagramHandle, ownerId, roomId])
 
-	const handleSubmitBlock = useCallback(() => {
-		if (!editor || !instagramHandle) return
+	const handleSubmitBlock = useCallback(async () => {
+		if (!editor || !instagramHandle || !roomId) return
 		try {
 			const blockId = findOwnedReservedBlock(editor, ownerId)
 			if (!blockId) {
-				setTileStatus('No reserved block to submit — place a sample first')
+				setStatus('No reserved block — place one first')
 				return
 			}
-			const size = shrinkBlockToContent(editor, blockId)
-			editor.select(blockId)
-			const bounds = editor.getShapePageBounds(blockId)
-			if (bounds) editor.zoomToBounds(bounds, { inset: 64, animation: { duration: 220 } })
-			setTileStatus(
+			const size = await submitBlockOnServer(editor, {
+				roomId,
+				ownerKey: ownerId,
+				blockId,
+			})
+			setStatus(
 				`Submitted — ${Math.round(size.before.width)}×${Math.round(size.before.height)} → ${Math.round(size.width)}×${Math.round(size.height)}`
 			)
 		} catch (error) {
 			console.error(error)
-			setTileStatus(error instanceof Error ? error.message : 'Submit failed')
+			setStatus(error instanceof Error ? error.message : 'Submit failed')
 		}
-	}, [editor, instagramHandle, ownerId])
+	}, [editor, instagramHandle, ownerId, roomId])
 
 	useEffect(() => {
-		if (!exportStatus && !tileStatus) return
+		if (!exportStatus && !status) return
 		const timeout = setTimeout(() => {
 			setExportStatus(null)
-			setTileStatus(null)
-		}, 4000)
+			setStatus(null)
+		}, 4500)
 		return () => clearTimeout(timeout)
-	}, [exportStatus, tileStatus])
+	}, [exportStatus, status])
 
 	useEffect(() => {
 		if (!editor) return
@@ -136,24 +166,28 @@ export function Room() {
 		})
 	}, [editor, instagramHandle])
 
+	const components = isAdmin ? adminComponents : communalComponents
+	const overrides = isAdmin ? adminOverrides : communalOverrides
+
 	return (
 		<RoomShell
 			isAdmin={isAdmin}
 			instagramHandle={instagramHandle}
 			exportStatus={exportStatus}
-			tileStatus={tileStatus}
+			status={status}
 			onExportPng={handleExportPng}
 			onExportPdf={handleExportPdf}
 			onClearBoard={handleClearBoard}
-			onPlaceSampleTile={handlePlaceSampleBlock}
-			onSubmitTile={handleSubmitBlock}
+			onPlaceBlock={handlePlaceBlock}
+			onSubmitBlock={handleSubmitBlock}
 		>
 			<Tldraw
 				store={store}
 				licenseKey={TLDRAW_LICENSE_KEY}
 				colorScheme="dark"
-				components={communalComponents}
-				overrides={communalOverrides}
+				components={components}
+				overrides={overrides}
+				tools={[StickerTool]}
 				options={{ maxPages: 1 }}
 				onMount={(mountedEditor) => {
 					setEditor(mountedEditor)
@@ -170,7 +204,6 @@ export function Room() {
 						})
 					}
 
-					// Always open framed on the scrapbook page.
 					mountedEditor.zoomToBounds(PAGE_BOUNDS, {
 						inset: 48,
 						animation: { duration: 0 },
@@ -189,20 +222,42 @@ export function Room() {
 						'shape',
 						(shape, source) => {
 							if (source !== 'user') return shape
-							const { ownerId: currentOwnerId, instagramHandle: currentHandle } =
+							const { ownerId: currentOwnerId, instagramHandle: currentHandle, isAdmin: admin } =
 								identityRef.current
-							if (!currentHandle) {
+							if (!currentHandle && !admin) {
 								throw new Error('Enter your Instagram handle to draw')
 							}
 
-							if (shape.meta.ownerId) return shape
+							// Image / sticker caps (toast, no throw)
+							if (shape.type === 'image') {
+								const isSticker = shape.meta.kind === 'sticker'
+								if (isSticker) {
+									if (
+										countOwnedMedia(mountedEditor, currentOwnerId, 'sticker') >=
+										MAX_STICKERS_PER_SUBMISSION
+									) {
+										showToast({ title: '2 sticker limit reached', severity: 'warning' })
+										throw new Error('STICKER_LIMIT')
+									}
+								} else if (
+									countOwnedMedia(mountedEditor, currentOwnerId, 'image') >=
+									MAX_IMAGES_PER_SUBMISSION
+								) {
+									showToast({ title: '3 image limit reached', severity: 'warning' })
+									throw new Error('IMAGE_LIMIT')
+								}
+							}
+
+							if (getShapeOwnerKey(shape)) return shape
 
 							return {
 								...shape,
 								meta: {
 									...shape.meta,
+									ownerKey: currentOwnerId,
 									ownerId: currentOwnerId,
-									instagramHandle: currentHandle,
+									displayName: currentHandle ? `@${currentHandle}` : shape.meta.displayName,
+									kind: shape.meta.kind ?? (shape.type === 'image' ? 'image' : shape.meta.kind),
 								},
 							}
 						}
@@ -225,13 +280,18 @@ export function Room() {
 							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
 							if (admin) return next
 
-							// Only the owner (or admin) can move/edit a shape.
-							if (prev.meta.ownerId && prev.meta.ownerId !== currentOwnerId) {
+							if (
+								!canUserMutateShape(prev, { ownerKey: currentOwnerId, isAdmin: admin }) ||
+								isInsideSubmittedBlock(prev, (id) => mountedEditor.getShape(id as never))
+							) {
 								return prev
 							}
 
-							// Defensive: if somehow unowned and it's a move by non-admin stranger, block.
-							if (!prev.meta.ownerId && isMovementChange(prev, next)) {
+							// Also block mutating others' shapes when ownerKey missing on legacy
+							if (prev.meta.ownerId && prev.meta.ownerId !== currentOwnerId) {
+								return prev
+							}
+							if (!getShapeOwnerKey(prev) && isMovementChange(prev, next)) {
 								return prev
 							}
 
@@ -245,16 +305,42 @@ export function Room() {
 							if (source !== 'user') return
 							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
 							if (admin) return
-							if (shape.meta.ownerId === currentOwnerId) return
+							if (
+								!canUserMutateShape(shape, { ownerKey: currentOwnerId, isAdmin: admin }) ||
+								isInsideSubmittedBlock(shape, (id) => mountedEditor.getShape(id as never))
+							) {
+								return false
+							}
+							if (getShapeOwnerKey(shape) === currentOwnerId) return
 							return false
 						}
 					)
+
+					// Selection lock: drop anything the user doesn't own (admin bypass).
+					const unsubSelection = react('scrapbook-selection-lock', () => {
+						const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
+						if (admin) return
+						const selected = mountedEditor.getSelectedShapes()
+						const allowed = selected.filter((shape) => {
+							const owner = getShapeOwnerKey(shape)
+							if (!owner) {
+								// Allow selecting own in-progress unmarked? Prefer only owned.
+								if (isScrapbookTile(shape)) return false
+								return false
+							}
+							return owner === currentOwnerId
+						})
+						if (allowed.length !== selected.length) {
+							mountedEditor.setSelectedShapes(allowed.map((s) => s.id))
+						}
+					})
 
 					return () => {
 						disposeBeforeCreate()
 						disposePageCreate()
 						disposeBeforeChange()
 						disposeBeforeDelete()
+						unsubSelection()
 						setEditor((current) => (current === mountedEditor ? null : current))
 					}
 				}}
@@ -269,35 +355,35 @@ function RoomShell({
 	isAdmin,
 	instagramHandle,
 	exportStatus,
-	tileStatus,
+	status,
 	onExportPng,
 	onExportPdf,
 	onClearBoard,
-	onPlaceSampleTile,
-	onSubmitTile,
+	onPlaceBlock,
+	onSubmitBlock,
 }: {
 	children: ReactNode
 	isAdmin: boolean
 	instagramHandle: string | null
 	exportStatus: string | null
-	tileStatus: string | null
+	status: string | null
 	onExportPng: () => void
 	onExportPdf: () => void
 	onClearBoard: () => void
-	onPlaceSampleTile: () => void
-	onSubmitTile: () => void
+	onPlaceBlock: () => void
+	onSubmitBlock: () => void
 }) {
 	return (
 		<div className="RoomWrapper">
 			{instagramHandle && (
 				<div className="RoomWrapper-checkBar">
-					<span className="RoomWrapper-adminBadge">CHECK A</span>
+					<span className="RoomWrapper-adminBadge">CHECK B/C</span>
 					<span className="RoomWrapper-handle">@{instagramHandle}</span>
-					<button className="RoomWrapper-button" onClick={onPlaceSampleTile}>
-						Place sample block
+					<button className="RoomWrapper-button" onClick={onPlaceBlock}>
+						Place block
 					</button>
-					<button className="RoomWrapper-button" onClick={onSubmitTile}>
-						Submit (shrink)
+					<button className="RoomWrapper-button" onClick={onSubmitBlock}>
+						Submit
 					</button>
 					{isAdmin && (
 						<>
@@ -312,8 +398,8 @@ function RoomShell({
 							</button>
 						</>
 					)}
-					{(tileStatus || exportStatus) && (
-						<span className="RoomWrapper-status">{tileStatus || exportStatus}</span>
+					{(status || exportStatus) && (
+						<span className="RoomWrapper-status">{status || exportStatus}</span>
 					)}
 				</div>
 			)}

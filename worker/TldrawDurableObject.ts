@@ -6,17 +6,26 @@ import {
 } from '@tldraw/sync-core'
 import {
 	createTLSchema,
-	// defaultBindingSchemas,
 	defaultShapeSchemas,
 	TLRecord,
 } from '@tldraw/tlschema'
 import { DurableObject } from 'cloudflare:workers'
-import { AutoRouter, error, IRequest } from 'itty-router'
+import { AutoRouter, error, IRequest, json } from 'itty-router'
+import {
+	applyPlace,
+	applySubmit,
+	clearLayout,
+	loadLayout,
+	placeBlock,
+	purgeExpired,
+	releaseBlock,
+	removeBlock,
+	saveLayout,
+	submitBlock,
+} from './layout'
 
-// add custom shapes and bindings here if needed:
 const schema = createTLSchema({
 	shapes: { ...defaultShapeSchemas },
-	// bindings: { ...defaultBindingSchemas },
 })
 
 interface SocketAttachment {
@@ -24,23 +33,12 @@ interface SocketAttachment {
 	snapshot: SessionStateSnapshot | null
 }
 
-// Each whiteboard room is hosted in a Durable Object with WebSocket Hibernation.
-// https://developers.cloudflare.com/durable-objects/
-//
-// There's only ever one durable object instance per room. Room state is
-// persisted automatically to SQLite via ctx.storage. When all clients are
-// idle, the DO hibernates (freeing memory) while WebSocket connections
-// stay alive at the Cloudflare layer.
 export class TldrawDurableObject extends DurableObject {
 	private room: TLSocketRoom<TLRecord, void> | null = null
-	/** Map sessionId → ws so onSessionSnapshot can serialize to the right socket. */
 	private readonly sessionIdToWs = new Map<string, WebSocket>()
 
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env)
-		// Respond to ping messages at the platform level without waking the DO.
-		// The TLSyncClient sends {"type":"ping"} every 5s; without this, each
-		// ping would wake the DO from hibernation.
 		this.ctx.setWebSocketAutoResponse(
 			new WebSocketRequestResponsePair('{"type":"ping"}', '{"type":"pong"}')
 		)
@@ -54,9 +52,6 @@ export class TldrawDurableObject extends DurableObject {
 			this.room = new TLSocketRoom<TLRecord, void>({
 				schema,
 				storage,
-				// Disable idle timeout since Cloudflare handles keep-alive via auto-response.
-				// Without this, sessions would be pruned after 20s of no "real" messages
-				// even though the client is still connected and being auto-ponged.
 				clientTimeout: Infinity,
 				onSessionSnapshot: (sessionId, snapshot) => {
 					const ws = this.sessionIdToWs.get(sessionId)
@@ -64,7 +59,6 @@ export class TldrawDurableObject extends DurableObject {
 				},
 			})
 
-			// Resume any sessions that survived hibernation
 			for (const ws of this.ctx.getWebSockets()) {
 				const attachment = ws.deserializeAttachment() as SocketAttachment | null
 				if (!attachment?.sessionId) continue
@@ -81,39 +75,113 @@ export class TldrawDurableObject extends DurableObject {
 		return this.room
 	}
 
-	private readonly router = AutoRouter({ catch: (e) => error(e) }).get(
-		'/api/connect/:roomId',
-		(request) => this.handleConnect(request)
-	)
+	private readonly router = AutoRouter({ catch: (e) => error(e) })
+		.get('/api/connect/:roomId', (request) => this.handleConnect(request))
+		.get('/api/layout/:roomId', () => this.handleGetLayout())
+		.post('/api/layout/:roomId/place', (request) => this.handlePlace(request))
+		.post('/api/layout/:roomId/submit', (request) => this.handleSubmit(request))
+		.post('/api/layout/:roomId/release', (request) => this.handleRelease(request))
+		.post('/api/layout/:roomId/clear', () => this.handleClearLayout())
+		.post('/api/layout/:roomId/remove', (request) => this.handleRemove(request))
 
-	// Entry point for all requests to the Durable Object
 	fetch(request: Request): Response | Promise<Response> {
 		return this.router.fetch(request)
 	}
 
-	// Handle new WebSocket connection requests
 	async handleConnect(request: IRequest) {
 		const sessionId = request.query.sessionId as string
 		if (!sessionId) return error(400, 'Missing sessionId')
 
-		// Create the websocket pair for the client
 		const { 0: clientWebSocket, 1: serverWebSocket } = new WebSocketPair()
-		// Use hibernation API instead of serverWebSocket.accept()
 		this.ctx.acceptWebSocket(serverWebSocket)
 
-		// Store sessionId in attachment immediately so we can identify this socket
-		// after hibernation, before the connect handshake completes.
 		const attachment: SocketAttachment = { sessionId, snapshot: null }
 		serverWebSocket.serializeAttachment(attachment)
 
-		// Connect to the room. The first webSocketMessage from the client will
-		// complete the handshake and trigger debounced snapshot storage.
 		this.getOrCreateRoom().handleSocketConnect({ sessionId, socket: serverWebSocket })
 
 		return new Response(null, { status: 101, webSocket: clientWebSocket })
 	}
 
-	// --- WebSocket Hibernation API handlers ---
+	private async handleGetLayout() {
+		const state = purgeExpired(await loadLayout(this.ctx.storage))
+		await saveLayout(this.ctx.storage, state)
+		return json(state)
+	}
+
+	private async handlePlace(request: IRequest) {
+		const body = (await request.json()) as {
+			ownerKey?: string
+			displayName?: string
+			shapeId?: string
+			x?: number
+			y?: number
+			w?: number
+			h?: number
+		}
+
+		const state = await loadLayout(this.ctx.storage)
+		const result = placeBlock(state, {
+			ownerKey: body.ownerKey ?? '',
+			displayName: body.displayName ?? '',
+			shapeId: body.shapeId ?? '',
+			x: Number(body.x) || 0,
+			y: Number(body.y) || 0,
+			w: body.w,
+			h: body.h,
+		})
+
+		if (!result.ok) return error(result.code, result.error)
+
+		const next = applyPlace(state, result.block)
+		await saveLayout(this.ctx.storage, next)
+		return json({ ok: true, nudged: result.nudged, block: result.block })
+	}
+
+	private async handleSubmit(request: IRequest) {
+		const body = (await request.json()) as {
+			ownerKey?: string
+			shapeId?: string
+			w?: number
+			h?: number
+		}
+
+		const state = await loadLayout(this.ctx.storage)
+		const result = submitBlock(state, {
+			ownerKey: body.ownerKey ?? '',
+			shapeId: body.shapeId ?? '',
+			w: Number(body.w) || 0,
+			h: Number(body.h) || 0,
+		})
+
+		if (!result.ok) return error(result.code, result.error)
+
+		const next = applySubmit(state, result.block)
+		await saveLayout(this.ctx.storage, next)
+		return json({ ok: true, block: result.block })
+	}
+
+	private async handleRelease(request: IRequest) {
+		const body = (await request.json()) as { ownerKey?: string; shapeId?: string }
+		const state = await loadLayout(this.ctx.storage)
+		const result = releaseBlock(state, body.ownerKey ?? '', body.shapeId ?? '')
+		if (!result.ok) return error(result.code, result.error)
+		await saveLayout(this.ctx.storage, result.state)
+		return json({ ok: true })
+	}
+
+	private async handleClearLayout() {
+		await saveLayout(this.ctx.storage, clearLayout())
+		return json({ ok: true })
+	}
+
+	private async handleRemove(request: IRequest) {
+		const body = (await request.json()) as { shapeId?: string }
+		if (!body.shapeId) return error(400, 'Missing shapeId')
+		const state = await loadLayout(this.ctx.storage)
+		await saveLayout(this.ctx.storage, removeBlock(state, body.shapeId))
+		return json({ ok: true })
+	}
 
 	private getSessionId(ws: WebSocket): string | null {
 		const attachment = ws.deserializeAttachment() as SocketAttachment | null
@@ -144,9 +212,6 @@ export class TldrawDurableObject extends DurableObject {
 
 		const room = this.getOrCreateRoom()
 
-		// If the DO was hibernating, this session was never re-added to the room
-		// (ctx.getWebSockets() doesn't include the disconnecting socket). Resume it
-		// briefly so the room can broadcast presence removal to other clients.
 		if (attachment.snapshot && !room.getSessionSnapshot(attachment.sessionId)) {
 			room.handleSocketResume({
 				sessionId: attachment.sessionId,

@@ -214,3 +214,68 @@ body {
 .InstagramGate-submit:hover {
 	filter: brightness(0.94);
 }
+
+.StickerPicker {
+	position: absolute;
+	z-index: 280;
+	left: 12px;
+	bottom: calc(72px + env(safe-area-inset-bottom, 0px) + var(--browser-chrome-bottom, 0px));
+}
+
+.StickerPicker-toggle {
+	appearance: none;
+	border: 1px solid var(--line);
+	background: rgba(10, 10, 10, 0.88);
+	color: var(--text);
+	padding: 8px 12px;
+	font: inherit;
+	font-size: 12px;
+	font-weight: 700;
+	cursor: pointer;
+	backdrop-filter: blur(8px);
+}
+
+.StickerPicker-toggle.is-active {
+	border-color: #888;
+	background: #1c1c1c;
+}
+
+.StickerPicker-panel {
+	position: absolute;
+	left: 0;
+	bottom: calc(100% + 8px);
+	display: grid;
+	grid-template-columns: repeat(3, 56px);
+	gap: 8px;
+	padding: 10px;
+	border: 1px solid var(--line);
+	background: rgba(10, 10, 10, 0.92);
+	backdrop-filter: blur(10px);
+}
+
+.StickerPicker-item {
+	appearance: none;
+	border: 1px solid var(--line);
+	background: #151515;
+	padding: 6px;
+	cursor: pointer;
+	width: 56px;
+	height: 56px;
+}
+
+.StickerPicker-item:hover {
+	border-color: #666;
+}
+
+.StickerPicker-preview {
+	display: grid;
+	place-items: center;
+	width: 100%;
+	height: 100%;
+}
+
+.StickerPicker-preview svg {
+	width: 36px;
+	height: 36px;
+	display: block;
+}
