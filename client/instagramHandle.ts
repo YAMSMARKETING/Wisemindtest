@@ -1,6 +1,6 @@
 import { getLocalStorageItem, setLocalStorageItem } from './localStorage'
 
-export const INSTAGRAM_HANDLE_STORAGE_KEY = 'communal-whiteboard-instagram-handle'
+export const INSTAGRAM_HANDLE_STORAGE_KEY = 'villescrapbook-instagram-handle'
 
 /** Normalize to a bare handle without leading @. */
 export function normalizeInstagramHandle(raw: string): string {
