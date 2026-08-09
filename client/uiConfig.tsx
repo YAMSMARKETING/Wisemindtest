@@ -10,7 +10,7 @@ import {
 	TLComponents,
 	TLUiOverrides,
 } from 'tldraw'
-import { BrandBackdrop } from './BrandBackdrop'
+import { PageFrame } from './PageFrame'
 
 /** Pointer, hand, pen, eraser, arrow, text, and image. Zoom lives in NavigationPanel. */
 export function CommunalToolbar() {
@@ -29,7 +29,7 @@ export function CommunalToolbar() {
 
 export const communalComponents: TLComponents = {
 	Toolbar: CommunalToolbar,
-	OnTheCanvas: BrandBackdrop,
+	OnTheCanvas: PageFrame,
 	PageMenu: null,
 	MainMenu: null,
 	KeyboardShortcutsDialog: null,

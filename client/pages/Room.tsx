@@ -11,7 +11,8 @@ import { getStoredInstagramHandle } from '../instagramHandle'
 import { multiplayerAssetStore } from '../multiplayerAssetStore'
 import { getOrCreateOwnerId } from '../ownerId'
 import { isMovementChange, overlapsAnotherUsersShape, shouldCullOnOverlap } from '../shapeGuards'
-import { BRAND_FOCUS_BOUNDS } from '../BrandBackdrop'
+import { PAGE_BOUNDS } from '../pageGeometry'
+import { findOwnedClaimedTile, placeSampleTile, shrinkTileToContent } from '../tile'
 import { communalComponents, communalOverrides } from '../uiConfig'
 
 export function Room() {
@@ -21,6 +22,8 @@ export function Room() {
 	const [instagramHandle, setInstagramHandle] = useState<string | null>(() => getStoredInstagramHandle())
 	const [editor, setEditor] = useState<Editor | null>(null)
 	const [exportStatus, setExportStatus] = useState<string | null>(null)
+
+	const [tileStatus, setTileStatus] = useState<string | null>(null)
 
 	const identityRef = useRef({ ownerId, isAdmin, instagramHandle })
 	identityRef.current = { ownerId, isAdmin, instagramHandle }
@@ -61,11 +64,57 @@ export function Room() {
 		setExportStatus('Board cleared')
 	}, [editor])
 
+	const handlePlaceSampleTile = useCallback(() => {
+		if (!editor || !instagramHandle) return
+		try {
+			const existing = findOwnedClaimedTile(editor, ownerId)
+			if (existing) {
+				editor.select(existing)
+				const bounds = editor.getShapePageBounds(existing)
+				if (bounds) editor.zoomToBounds(bounds, { inset: 64, animation: { duration: 220 } })
+				setTileStatus('You already have a claimed sample tile')
+				return
+			}
+			placeSampleTile(editor, {
+				ownerKey: ownerId,
+				displayName: `@${instagramHandle}`,
+				columnIndex: 1,
+				y: 80,
+			})
+			setTileStatus('Sample tile placed — draw past the edge, then Submit')
+		} catch (error) {
+			console.error(error)
+			setTileStatus(error instanceof Error ? error.message : 'Could not place tile')
+		}
+	}, [editor, instagramHandle, ownerId])
+
+	const handleSubmitTile = useCallback(() => {
+		if (!editor || !instagramHandle) return
+		try {
+			const tileId = findOwnedClaimedTile(editor, ownerId)
+			if (!tileId) {
+				setTileStatus('No claimed tile to submit — place a sample first')
+				return
+			}
+			const size = shrinkTileToContent(editor, tileId)
+			editor.select(tileId)
+			const bounds = editor.getShapePageBounds(tileId)
+			if (bounds) editor.zoomToBounds(bounds, { inset: 64, animation: { duration: 220 } })
+			setTileStatus(`Submitted — shrunk to ${Math.round(size.width)}×${Math.round(size.height)}`)
+		} catch (error) {
+			console.error(error)
+			setTileStatus(error instanceof Error ? error.message : 'Submit failed')
+		}
+	}, [editor, instagramHandle, ownerId])
+
 	useEffect(() => {
-		if (!exportStatus) return
-		const timeout = setTimeout(() => setExportStatus(null), 3000)
+		if (!exportStatus && !tileStatus) return
+		const timeout = setTimeout(() => {
+			setExportStatus(null)
+			setTileStatus(null)
+		}, 4000)
 		return () => clearTimeout(timeout)
-	}, [exportStatus])
+	}, [exportStatus, tileStatus])
 
 	useEffect(() => {
 		if (!editor) return
@@ -76,10 +125,8 @@ export function Room() {
 				colorScheme: 'dark',
 			})
 		}
-		// Keep framing on the logo whenever identity/editor is ready.
-		editor.zoomToBounds(BRAND_FOCUS_BOUNDS, {
+		editor.zoomToBounds(PAGE_BOUNDS, {
 			inset: 48,
-			targetZoom: 1,
 			animation: { duration: 0 },
 		})
 	}, [editor, instagramHandle])
@@ -89,9 +136,12 @@ export function Room() {
 			isAdmin={isAdmin}
 			instagramHandle={instagramHandle}
 			exportStatus={exportStatus}
+			tileStatus={tileStatus}
 			onExportPng={handleExportPng}
 			onExportPdf={handleExportPdf}
 			onClearBoard={handleClearBoard}
+			onPlaceSampleTile={handlePlaceSampleTile}
+			onSubmitTile={handleSubmitTile}
 		>
 			<Tldraw
 				store={store}
@@ -115,10 +165,9 @@ export function Room() {
 						})
 					}
 
-					// Always open centered on the brand mark.
-					mountedEditor.zoomToBounds(BRAND_FOCUS_BOUNDS, {
+					// Always open framed on the scrapbook page.
+					mountedEditor.zoomToBounds(PAGE_BOUNDS, {
 						inset: 48,
-						targetZoom: 1,
 						animation: { duration: 0 },
 					})
 
@@ -251,34 +300,52 @@ function RoomShell({
 	isAdmin,
 	instagramHandle,
 	exportStatus,
+	tileStatus,
 	onExportPng,
 	onExportPdf,
 	onClearBoard,
+	onPlaceSampleTile,
+	onSubmitTile,
 }: {
 	children: ReactNode
 	isAdmin: boolean
 	instagramHandle: string | null
 	exportStatus: string | null
+	tileStatus: string | null
 	onExportPng: () => void
 	onExportPdf: () => void
 	onClearBoard: () => void
+	onPlaceSampleTile: () => void
+	onSubmitTile: () => void
 }) {
 	return (
 		<div className="RoomWrapper">
-			{isAdmin && instagramHandle && (
-				<div className="RoomWrapper-adminBar">
-					<span className="RoomWrapper-adminBadge">Admin</span>
+			{instagramHandle && (
+				<div className="RoomWrapper-checkBar">
+					<span className="RoomWrapper-adminBadge">CHECK A</span>
 					<span className="RoomWrapper-handle">@{instagramHandle}</span>
-					<button className="RoomWrapper-button" onClick={onExportPng}>
-						Export PNG
+					<button className="RoomWrapper-button" onClick={onPlaceSampleTile}>
+						Place sample tile
 					</button>
-					<button className="RoomWrapper-button" onClick={onExportPdf}>
-						Export PDF
+					<button className="RoomWrapper-button" onClick={onSubmitTile}>
+						Submit (shrink)
 					</button>
-					<button className="RoomWrapper-button" onClick={onClearBoard}>
-						Clear board
-					</button>
-					{exportStatus && <span className="RoomWrapper-status">{exportStatus}</span>}
+					{isAdmin && (
+						<>
+							<button className="RoomWrapper-button" onClick={onExportPng}>
+								Export PNG
+							</button>
+							<button className="RoomWrapper-button" onClick={onExportPdf}>
+								Export PDF
+							</button>
+							<button className="RoomWrapper-button" onClick={onClearBoard}>
+								Clear board
+							</button>
+						</>
+					)}
+					{(tileStatus || exportStatus) && (
+						<span className="RoomWrapper-status">{tileStatus || exportStatus}</span>
+					)}
 				</div>
 			)}
 			<div className="RoomWrapper-content">{children}</div>

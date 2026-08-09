@@ -78,18 +78,23 @@ body {
 	min-height: 0;
 }
 
-.RoomWrapper-adminBar {
+.RoomWrapper-adminBar,
+.RoomWrapper-checkBar {
 	position: absolute;
 	z-index: 300;
 	top: 12px;
 	left: 12px;
+	right: 12px;
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: 8px;
 	padding: 8px 10px;
 	border: 1px solid var(--line);
 	background: rgba(10, 10, 10, 0.88);
 	backdrop-filter: blur(8px);
+	max-width: calc(100% - 24px);
+	width: fit-content;
 }
 
 .RoomWrapper-adminBadge {
