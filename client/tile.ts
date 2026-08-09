@@ -74,7 +74,7 @@ export function shrinkTileToContent(editor: Editor, tileId: TLShapeId) {
 			props: { w: width, h: MIN_TILE_HEIGHT, name: tile.props.name },
 			meta: { ...tile.meta, status: 'submitted' satisfies TileStatus },
 		})
-		return { width, height: MIN_TILE_HEIGHT }
+		return { width, height: MIN_TILE_HEIGHT, beforeHeight: tile.props.h }
 	}
 
 	const dx = TILE_PADDING - content.x
@@ -112,7 +112,7 @@ export function shrinkTileToContent(editor: Editor, tileId: TLShapeId) {
 		},
 	})
 
-	return { width, height }
+	return { width, height, beforeHeight: tile.props.h }
 }
 
 export type PlaceSampleTileOpts = {
@@ -125,9 +125,8 @@ export type PlaceSampleTileOpts = {
 }
 
 /**
- * Hand-placed sample tile for CHECK A: a frame that clips children, pre-filled
- * with caption text + a doodle that intentionally overhangs so clip is visible
- * before submit, then shrinks cleanly on submit.
+ * Hand-placed sample tile for CHECK A: a clipping frame with content clustered
+ * in the top ~240px of a 480px starter, so Submit visibly reclaims unused space.
  */
 export function placeSampleTile(editor: Editor, opts: PlaceSampleTileOpts) {
 	const columnIndex = opts.columnIndex ?? 1
@@ -136,7 +135,8 @@ export function placeSampleTile(editor: Editor, opts: PlaceSampleTileOpts) {
 	const tileId = createShapeId()
 	const textId = createShapeId()
 	const doodleId = createShapeId()
-	const overflowId = createShapeId()
+	const chipId = createShapeId()
+	const innerW = COLUMN_WIDTH - TILE_PADDING * 2
 
 	editor.createShapes([
 		{
@@ -168,6 +168,7 @@ export function placeSampleTile(editor: Editor, opts: PlaceSampleTileOpts) {
 				font: 'sans',
 				textAlign: 'start',
 				scale: 1,
+				w: innerW,
 				richText: toRichText(
 					`${opts.displayName}\nA memory from Fayetteville — CHECK A sample.`
 				),
@@ -182,11 +183,11 @@ export function placeSampleTile(editor: Editor, opts: PlaceSampleTileOpts) {
 			type: 'geo',
 			parentId: tileId,
 			x: TILE_PADDING,
-			y: 110,
+			y: 100,
 			props: {
 				geo: 'ellipse',
-				w: COLUMN_WIDTH - TILE_PADDING * 2,
-				h: 90,
+				w: innerW,
+				h: 72,
 				color: 'red',
 				fill: 'semi',
 				dash: 'draw',
@@ -197,23 +198,21 @@ export function placeSampleTile(editor: Editor, opts: PlaceSampleTileOpts) {
 				displayName: opts.displayName,
 			},
 		},
-		// Intentionally hangs past the starter tile bottom so clipping is obvious
-		// before shrink; after shrink the tile hugs the in-bounds content.
 		{
-			id: overflowId,
+			id: chipId,
 			type: 'geo',
 			parentId: tileId,
-			x: TILE_PADDING + 24,
-			y: STARTER_TILE_HEIGHT - 40,
+			x: TILE_PADDING + 8,
+			y: 190,
 			props: {
 				geo: 'rectangle',
-				w: COLUMN_WIDTH - TILE_PADDING * 2 - 48,
-				h: 120,
+				w: innerW - 16,
+				h: 36,
 				color: 'blue',
 				fill: 'solid',
 				dash: 'solid',
 				size: 's',
-				richText: toRichText('clipped until submit'),
+				richText: toRichText('shrink me'),
 			},
 			meta: {
 				ownerKey: opts.ownerKey,

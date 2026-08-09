@@ -105,7 +105,9 @@ export function Room() {
 			editor.select(tileId)
 			const bounds = editor.getShapePageBounds(tileId)
 			if (bounds) editor.zoomToBounds(bounds, { inset: 64, animation: { duration: 220 } })
-			setTileStatus(`Submitted — shrunk to ${Math.round(size.width)}×${Math.round(size.height)}`)
+			setTileStatus(
+				`Submitted — ${Math.round(size.beforeHeight)}→${Math.round(size.height)} tall (col w ${Math.round(size.width)})`
+			)
 		} catch (error) {
 			console.error(error)
 			setTileStatus(error instanceof Error ? error.message : 'Submit failed')
