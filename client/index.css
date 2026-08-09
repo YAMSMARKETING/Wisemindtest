@@ -16,12 +16,36 @@
 	box-sizing: border-box;
 }
 
+html {
+	height: 100%;
+	overflow: hidden;
+}
+
 body {
 	margin: 0;
+	height: 100%;
+	overflow: hidden;
 	font-family: 'Instrument Sans', sans-serif;
 	background: var(--bg);
 	color: var(--text);
 	overscroll-behavior: none;
+	/* Fallback until iosViewport.ts measures */
+	--browser-chrome-bottom: 0px;
+	--app-height: 100svh;
+	--app-top: 0px;
+}
+
+/*
+ * Pin the app to the visual viewport. On iOS Safari, 100vh / absolute fill
+ * of the layout viewport extends under the bottom browser chrome.
+ */
+#root {
+	position: fixed;
+	top: var(--app-top, 0px);
+	left: 0;
+	width: 100%;
+	height: var(--app-height, 100svh);
+	overflow: hidden;
 }
 
 /* Force a true black canvas regardless of theme tokens */
@@ -36,20 +60,16 @@ body {
 	position: absolute;
 	inset: 0;
 	background: #000;
+	overscroll-behavior: none;
 }
 
 /*
- * Lift bottom toolbar/nav above iOS home indicator + Safari chrome.
+ * tldraw pads the bottom toolbar with --tl-sab (safe-area only by default).
+ * Fold in the measured Safari/browser chrome inset so tools stay tappable.
  * Requires viewport-fit=cover for safe-area-inset-* to be non-zero.
  */
-@media (max-width: 768px) {
-	.tlui-main-toolbar--horizontal {
-		padding-bottom: calc(var(--tl-space-3) + env(safe-area-inset-bottom, 0px) + 28px) !important;
-	}
-
-	.tlui-navigation-panel {
-		margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 28px) !important;
-	}
+.tlui-layout {
+	--tl-sab: calc(env(safe-area-inset-bottom, 0px) + var(--browser-chrome-bottom, 0px));
 }
 
 .RoomWrapper-content {
