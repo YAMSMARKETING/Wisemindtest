@@ -228,7 +228,7 @@ export function Room() {
 								throw new Error('Enter your Instagram handle to draw')
 							}
 
-							// Image / sticker caps (toast, no throw)
+							// Image / sticker caps (toast, then abort create)
 							if (shape.type === 'image') {
 								const isSticker = shape.meta.kind === 'sticker'
 								if (isSticker) {
@@ -250,15 +250,25 @@ export function Room() {
 
 							if (getShapeOwnerKey(shape)) return shape
 
+							// meta must be JSON-serializable — never write `undefined` values
+							const meta: Record<string, string> = {
+								ownerKey: currentOwnerId,
+								ownerId: currentOwnerId,
+							}
+							if (currentHandle) {
+								meta.displayName = `@${currentHandle}`
+							} else if (typeof shape.meta.displayName === 'string') {
+								meta.displayName = shape.meta.displayName
+							}
+							if (shape.type === 'image') {
+								meta.kind = shape.meta.kind === 'sticker' ? 'sticker' : 'image'
+							} else if (typeof shape.meta.kind === 'string') {
+								meta.kind = shape.meta.kind
+							}
+
 							return {
 								...shape,
-								meta: {
-									...shape.meta,
-									ownerKey: currentOwnerId,
-									ownerId: currentOwnerId,
-									displayName: currentHandle ? `@${currentHandle}` : shape.meta.displayName,
-									kind: shape.meta.kind ?? (shape.type === 'image' ? 'image' : shape.meta.kind),
-								},
+								meta,
 							}
 						}
 					)
