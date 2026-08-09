@@ -141,15 +141,6 @@ export function Room() {
 								throw new Error('Enter your Instagram handle to draw')
 							}
 
-							if (shape.type === 'image') {
-								const imageAlreadyExists = mountedEditor
-									.getCurrentPageShapes()
-									.some((existing) => existing.type === 'image')
-								if (imageAlreadyExists) {
-									throw new Error('Only one image is allowed on the board at a time')
-								}
-							}
-
 							if (shape.meta.ownerId) return shape
 
 							return {
