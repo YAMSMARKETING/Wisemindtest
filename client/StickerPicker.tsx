@@ -2,17 +2,17 @@ import { useState } from 'react'
 import { track, useEditor } from 'tldraw'
 import { STICKERS } from './stickers'
 import { setPendingSticker } from './stickerPending'
+import { stampStickerInReservedBlock } from './stampSticker'
 
 export const StickerPicker = track(function StickerPicker() {
 	const editor = useEditor()
 	const [open, setOpen] = useState(false)
-	const tool = editor.getCurrentToolId()
 
 	return (
 		<div className="StickerPicker">
 			<button
 				type="button"
-				className={`StickerPicker-toggle${tool === 'sticker' || open ? ' is-active' : ''}`}
+				className={`StickerPicker-toggle${open ? ' is-active' : ''}`}
 				onClick={() => setOpen((v) => !v)}
 				title="Stickers"
 			>
@@ -28,7 +28,7 @@ export const StickerPicker = track(function StickerPicker() {
 							title={sticker.label}
 							onClick={() => {
 								setPendingSticker(sticker.id)
-								editor.setCurrentTool('sticker')
+								stampStickerInReservedBlock(editor, sticker)
 								setOpen(false)
 							}}
 						>
