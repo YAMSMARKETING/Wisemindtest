@@ -81,6 +81,11 @@ export function Room() {
 				columnIndex: 1,
 				y: 80,
 			})
+			const stillThere = findOwnedClaimedTile(editor, ownerId)
+			if (!stillThere) {
+				setTileStatus('Tile was removed after place — check ownership/cull guards')
+				return
+			}
 			setTileStatus('Sample tile placed — draw past the edge, then Submit')
 		} catch (error) {
 			console.error(error)
@@ -252,7 +257,7 @@ export function Room() {
 							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
 							if (admin) return
 							if (next.meta.ownerId !== currentOwnerId) return
-							if (!shouldCullOnOverlap(next)) return
+							if (!shouldCullOnOverlap(mountedEditor, next)) return
 							if (!overlapsAnotherUsersShape(mountedEditor, next, currentOwnerId)) return
 
 							// Small draw strokes are noisy; only cull once they cover real area.
@@ -273,7 +278,7 @@ export function Room() {
 							if (admin) return
 							// Freehand strokes grow while drawing; don't delete on create.
 							if (shape.type === 'draw') return
-							if (!shouldCullOnOverlap(shape)) return
+							if (!shouldCullOnOverlap(mountedEditor, shape)) return
 							if (!overlapsAnotherUsersShape(mountedEditor, shape, currentOwnerId)) return
 							mountedEditor.deleteShapes([shape.id])
 						}

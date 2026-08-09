@@ -1,4 +1,5 @@
 import { Box, Editor, TLShape } from 'tldraw'
+import { isScrapbookTile } from './tile'
 
 function boundsOverlap(a: Box, b: Box, padding = 8) {
 	const left = Math.max(a.x, b.x)
@@ -16,6 +17,10 @@ export function overlapsAnotherUsersShape(editor: Editor, shape: TLShape, ownerI
 	for (const other of editor.getCurrentPageShapes()) {
 		if (other.id === shape.id) continue
 		if (other.meta.ownerId === ownerId) continue
+		// Ignore scrapbook tiles / their children in overlap math — tiles are the new unit.
+		if (isScrapbookTile(other)) continue
+		const parent = other.parentId ? editor.getShape(other.parentId) : undefined
+		if (parent && isScrapbookTile(parent)) continue
 		const otherBounds = editor.getShapePageBounds(other)
 		if (!otherBounds) continue
 		if (boundsOverlap(bounds, otherBounds)) return true
@@ -35,10 +40,13 @@ export function isMovementChange(prev: TLShape, next: TLShape) {
 }
 
 /**
- * Overlap culling is for writing over someone else's marks (text/arrows/etc.).
- * Media is intentionally placeable anywhere — default image placement often lands
- * on existing content and would otherwise disappear immediately.
+ * Overlap culling is for freeform writing over someone else's marks.
+ * Scrapbook tiles (and media) are exempt — tiles are clipped containers.
  */
-export function shouldCullOnOverlap(shape: TLShape) {
-	return shape.type !== 'image' && shape.type !== 'video'
+export function shouldCullOnOverlap(editor: Editor, shape: TLShape) {
+	if (shape.type === 'image' || shape.type === 'video') return false
+	if (isScrapbookTile(shape)) return false
+	const parent = shape.parentId ? editor.getShape(shape.parentId) : undefined
+	if (parent && isScrapbookTile(parent)) return false
+	return true
 }
