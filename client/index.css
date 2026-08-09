@@ -1,108 +1,189 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;700&family=Syne:wght@700;800&display=swap');
 @import url('tldraw/tldraw.css');
 
+:root {
+	--bg: #050505;
+	--panel: #111111;
+	--text: #f4f4f4;
+	--muted: #a0a0a0;
+	--line: #2a2a2a;
+	--accent: #f2f2f2;
+	--danger: #ff6b6b;
+	color-scheme: dark;
+}
+
+* {
+	box-sizing: border-box;
+}
+
 body {
-	font-family: 'Inter', sans-serif;
+	margin: 0;
+	font-family: 'Instrument Sans', sans-serif;
+	background: var(--bg);
+	color: var(--text);
 	overscroll-behavior: none;
 }
 
-.RoomWrapper {
-	--background: white;
-	--text: hsl(0, 0%, 20%);
-	--gray-light: #f5f5f5;
-	--gray-dark: #e5e5e5;
-	--black-transparent-lighter: rgba(0, 0, 0, 0.15);
-	--black-transparent-light: rgba(0, 0, 0, 0.4);
-	--black-transparent-dark: rgba(0, 0, 0, 0.6);
-	--black-transparent-darker: rgba(0, 0, 0, 0.7);
-	--focus: hsl(217, 89%, 61%);
-	--whiteboard: hsl(240, 5%, 96%);
-	color-scheme: light;
-}
-
-:root:has(.tl-theme__dark) .RoomWrapper {
-	--background: black;
-	--text: hsl(0, 9%, 94%);
-	--gray-light: #333;
-	--gray-dark: #444;
-	--black-transparent-lighter: rgba(255, 255, 255, 0.15);
-	--black-transparent-light: rgba(255, 255, 255, 0.4);
-	--black-transparent-dark: rgba(255, 255, 255, 0.6);
-	--black-transparent-darker: rgba(255, 255, 255, 0.7);
-	--focus: hsl(217, 89%, 61%);
-	--whiteboard: hsl(240, 5%, 6.5%);
-	color-scheme: dark;
+/* Force a true black canvas regardless of theme tokens */
+.tl-background,
+.tl-theme__dark .tl-background {
+	background-color: #000 !important;
 }
 
 .RoomWrapper {
 	display: flex;
 	flex-direction: column;
 	position: absolute;
-	inset: 0px;
-}
-
-.RoomWrapper-header {
-	display: flex;
-	flex-direction: row;
-	justify-content: flex-start;
-	align-items: center;
-	padding: 8px 16px;
-	gap: 16px;
-	background: var(--background);
-	border-bottom: 1px solid var(--gray-dark);
-	color: var(--text);
-	font-size: 14px;
-}
-
-.RoomWrapper-copy {
-	background: var(--black-transparent-lighter);
-	border: 1px solid var(--gray-dark);
-	border-radius: 4px;
-	padding: 4px 12px;
-	height: 24px;
-	cursor: pointer;
-	position: relative;
-	text-align: center;
-}
-
-.RoomWrapper-copy:has(.RoomWrapper-copied) {
-	color: transparent;
-}
-
-.RoomWrapper-copied {
-	color: var(--text);
-	position: absolute;
 	inset: 0;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-.RoomWrapper-copy:hover {
-	border: 1px solid var(--black-transparent-lighter);
-}
-
-.RoomWrapper-adminBadge {
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
-	color: var(--focus);
-}
-
-.RoomWrapper-adminActions {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin-left: auto;
-}
-
-.RoomWrapper-status {
-	font-size: 12px;
-	color: var(--black-transparent-dark);
+	background: #000;
 }
 
 .RoomWrapper-content {
 	position: relative;
 	flex: 1;
+	min-height: 0;
+}
+
+.RoomWrapper-adminBar {
+	position: absolute;
+	z-index: 300;
+	top: 12px;
+	left: 12px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 10px;
+	border: 1px solid var(--line);
+	background: rgba(10, 10, 10, 0.88);
+	backdrop-filter: blur(8px);
+}
+
+.RoomWrapper-adminBadge {
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text);
+}
+
+.RoomWrapper-handle {
+	font-size: 12px;
+	color: var(--muted);
+}
+
+.RoomWrapper-button {
+	appearance: none;
+	border: 1px solid var(--line);
+	background: #1a1a1a;
+	color: var(--text);
+	padding: 6px 10px;
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.RoomWrapper-button:hover {
+	border-color: #555;
+}
+
+.RoomWrapper-status {
+	font-size: 12px;
+	color: var(--muted);
+}
+
+.InstagramGate {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	padding: 24px;
+	background:
+		radial-gradient(circle at top, rgba(255, 255, 255, 0.08), transparent 40%),
+		linear-gradient(180deg, #0a0a0a 0%, #000 100%);
+}
+
+.InstagramGate-card {
+	width: min(100%, 420px);
+	padding: 32px 28px;
+	border: 1px solid var(--line);
+	background: rgba(12, 12, 12, 0.95);
+	box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+
+.InstagramGate-brand {
+	margin: 0 0 12px;
+	font-family: 'Syne', sans-serif;
+	font-size: clamp(28px, 6vw, 40px);
+	font-weight: 800;
+	letter-spacing: -0.04em;
+	line-height: 0.95;
+}
+
+.InstagramGate-title {
+	margin: 0 0 8px;
+	font-size: 18px;
+	font-weight: 700;
+}
+
+.InstagramGate-copy {
+	margin: 0 0 24px;
+	color: var(--muted);
+	font-size: 14px;
+	line-height: 1.45;
+}
+
+.InstagramGate-label {
+	display: block;
+	margin-bottom: 8px;
+	font-size: 12px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--muted);
+}
+
+.InstagramGate-inputRow {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	margin-bottom: 12px;
+	border: 1px solid var(--line);
+	background: #080808;
+	padding: 0 12px;
+}
+
+.InstagramGate-at {
+	color: var(--muted);
+}
+
+.InstagramGate-input {
+	flex: 1;
+	border: 0;
+	background: transparent;
+	color: var(--text);
+	font: inherit;
+	font-size: 16px;
+	padding: 14px 0;
+	outline: none;
+}
+
+.InstagramGate-error {
+	margin: 0 0 12px;
+	color: var(--danger);
+	font-size: 13px;
+}
+
+.InstagramGate-submit {
+	width: 100%;
+	appearance: none;
+	border: 0;
+	background: var(--accent);
+	color: #000;
+	font: inherit;
+	font-weight: 700;
+	padding: 14px 16px;
+	cursor: pointer;
+}
+
+.InstagramGate-submit:hover {
+	filter: brightness(0.92);
 }
