@@ -35,7 +35,26 @@ body {
 	flex-direction: column;
 	position: absolute;
 	inset: 0;
+	/* Keep absolute UI above iOS home indicator / notch. */
+	top: env(safe-area-inset-top, 0px);
+	right: env(safe-area-inset-right, 0px);
+	bottom: env(safe-area-inset-bottom, 0px);
+	left: env(safe-area-inset-left, 0px);
 	background: #000;
+}
+
+/*
+ * Extra lift for bottom controls on phones / iframe embeds.
+ * safe-area alone often isn't enough under Safari's bottom chrome.
+ */
+@media (max-width: 768px) {
+	.tlui-main-toolbar--horizontal {
+		padding-bottom: calc(var(--tl-space-3) + env(safe-area-inset-bottom, 0px) + 28px) !important;
+	}
+
+	.tlui-navigation-panel {
+		bottom: calc(env(safe-area-inset-bottom, 0px) + 28px) !important;
+	}
 }
 
 .RoomWrapper-content {
