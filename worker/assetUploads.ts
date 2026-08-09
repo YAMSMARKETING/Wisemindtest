@@ -14,11 +14,32 @@ declare global {
 	}
 }
 
+function contentTypeFromUploadId(uploadId: string) {
+	const lower = uploadId.toLowerCase()
+	if (lower.endsWith('.png')) return 'image/png'
+	if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
+	if (lower.endsWith('.gif')) return 'image/gif'
+	if (lower.endsWith('.webp')) return 'image/webp'
+	if (lower.endsWith('.svg')) return 'image/svg+xml'
+	if (lower.endsWith('.heic')) return 'image/heic'
+	if (lower.endsWith('.heif')) return 'image/heif'
+	if (lower.endsWith('.mp4')) return 'video/mp4'
+	if (lower.endsWith('.webm')) return 'video/webm'
+	if (lower.endsWith('.mov')) return 'video/quicktime'
+	return null
+}
+
 // when a user uploads an asset, we store it in the bucket. we only allow image and video assets.
 export async function handleAssetUpload(request: IRequest, env: Env) {
 	const objectName = getAssetObjectName(request.params.uploadId)
 
-	const contentType = request.headers.get('content-type') ?? ''
+	const headerType = (request.headers.get('content-type') ?? '').split(';')[0].trim()
+	const inferredType = contentTypeFromUploadId(request.params.uploadId)
+	const contentType =
+		headerType.startsWith('image/') || headerType.startsWith('video/')
+			? headerType
+			: (inferredType ?? headerType)
+
 	if (!contentType.startsWith('image/') && !contentType.startsWith('video/')) {
 		return error(400, 'Invalid content type')
 	}
@@ -41,7 +62,9 @@ export async function handleAssetUpload(request: IRequest, env: Env) {
 	}
 
 	await env.TLDRAW_BUCKET.put(objectName, body, {
-		httpMetadata: request.headers,
+		httpMetadata: {
+			contentType,
+		},
 	})
 
 	return { ok: true }

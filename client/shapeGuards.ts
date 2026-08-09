@@ -33,3 +33,12 @@ export function isMovementChange(prev: TLShape, next: TLShape) {
 	}
 	return false
 }
+
+/**
+ * Overlap culling is for writing over someone else's marks (text/arrows/etc.).
+ * Media is intentionally placeable anywhere — default image placement often lands
+ * on existing content and would otherwise disappear immediately.
+ */
+export function shouldCullOnOverlap(shape: TLShape) {
+	return shape.type !== 'image' && shape.type !== 'video' && shape.type !== 'draw'
+}

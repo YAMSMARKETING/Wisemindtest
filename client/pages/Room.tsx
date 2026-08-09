@@ -10,7 +10,7 @@ import { InstagramGate } from '../InstagramGate'
 import { getStoredInstagramHandle } from '../instagramHandle'
 import { multiplayerAssetStore } from '../multiplayerAssetStore'
 import { getOrCreateOwnerId } from '../ownerId'
-import { isMovementChange, overlapsAnotherUsersShape } from '../shapeGuards'
+import { isMovementChange, overlapsAnotherUsersShape, shouldCullOnOverlap } from '../shapeGuards'
 import { BRAND_FOCUS_BOUNDS } from '../BrandBackdrop'
 import { communalComponents, communalOverrides } from '../uiConfig'
 
@@ -203,13 +203,8 @@ export function Room() {
 							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
 							if (admin) return
 							if (next.meta.ownerId !== currentOwnerId) return
+							if (!shouldCullOnOverlap(next)) return
 							if (!overlapsAnotherUsersShape(mountedEditor, next, currentOwnerId)) return
-
-							if (next.type === 'draw') {
-								const bounds = mountedEditor.getShapePageBounds(next)
-								if (!bounds || bounds.w < 24 || bounds.h < 24) return
-							}
-
 							mountedEditor.deleteShapes([next.id])
 						}
 					)
@@ -220,7 +215,7 @@ export function Room() {
 							if (source !== 'user') return
 							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
 							if (admin) return
-							if (shape.type === 'draw') return
+							if (!shouldCullOnOverlap(shape)) return
 							if (!overlapsAnotherUsersShape(mountedEditor, shape, currentOwnerId)) return
 							mountedEditor.deleteShapes([shape.id])
 						}
