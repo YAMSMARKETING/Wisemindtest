@@ -10,4 +10,7 @@ export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024
  */
 export const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET || 'communal-admin'
 
+/** Optional hobby/commercial license for production HTTPS. */
+export const TLDRAW_LICENSE_KEY = import.meta.env.VITE_TLDRAW_LICENSE_KEY || undefined
+
 export const OWNER_ID_STORAGE_KEY = 'communal-whiteboard-owner-id'

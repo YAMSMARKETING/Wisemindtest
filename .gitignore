@@ -3,3 +3,7 @@ node_modules
 .yarn/
 .wrangler/
 dist/
+.env
+.env.*
+!.env.example
+.dev.vars

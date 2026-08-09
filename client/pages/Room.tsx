@@ -3,6 +3,7 @@ import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Editor, Tldraw } from 'tldraw'
 import { isAdminFromSearch } from '../admin'
+import { TLDRAW_LICENSE_KEY } from '../constants'
 import { clearBoard, exportBoardAsPdf, exportBoardAsPng } from '../exportBoard'
 import { getBookmarkPreview } from '../getBookmarkPreview'
 import { multiplayerAssetStore } from '../multiplayerAssetStore'
@@ -73,6 +74,7 @@ export function Room() {
 				// we can pass the connected store into the Tldraw component which will handle
 				// loading states & enable multiplayer UX like cursors & a presence menu
 				store={store}
+				licenseKey={TLDRAW_LICENSE_KEY}
 				options={{ deepLinks: true }}
 				onMount={(mountedEditor) => {
 					setEditor(mountedEditor)
