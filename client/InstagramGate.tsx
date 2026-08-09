@@ -13,7 +13,7 @@ export function InstagramGate({ onJoined }: { onJoined: (handle: string) => void
 		event.preventDefault()
 		const handle = normalizeInstagramHandle(value)
 		if (!isValidInstagramHandle(handle)) {
-			setError('Use a valid Instagram handle (letters, numbers, . and _)')
+			setError('Use letters, numbers, . or _')
 			return
 		}
 		try {
@@ -24,14 +24,12 @@ export function InstagramGate({ onJoined }: { onJoined: (handle: string) => void
 	}
 
 	return (
-		<div className="InstagramGate">
+		<div className="InstagramGate" role="dialog" aria-modal="true" aria-labelledby="instagram-gate-title">
 			<form className="InstagramGate-card" onSubmit={handleSubmit}>
-				<p className="InstagramGate-brand">Communal Whiteboard</p>
-				<h1 className="InstagramGate-title">Drop your Instagram to enter</h1>
-				<p className="InstagramGate-copy">Everyone on the board sees your handle with your cursor.</p>
-				<label className="InstagramGate-label" htmlFor="instagram-handle">
-					Instagram handle
-				</label>
+				<h1 id="instagram-gate-title" className="InstagramGate-title">
+					Enter with Instagram
+				</h1>
+				<p className="InstagramGate-copy">Your handle shows on your cursor.</p>
 				<div className="InstagramGate-inputRow">
 					<span className="InstagramGate-at" aria-hidden="true">
 						@
@@ -43,7 +41,8 @@ export function InstagramGate({ onJoined }: { onJoined: (handle: string) => void
 						autoCapitalize="none"
 						autoCorrect="off"
 						spellCheck={false}
-						placeholder="yourhandle"
+						placeholder="handle"
+						aria-label="Instagram handle"
 						value={value}
 						onChange={(event) => {
 							setValue(event.target.value)
@@ -53,7 +52,7 @@ export function InstagramGate({ onJoined }: { onJoined: (handle: string) => void
 				</div>
 				{error && <p className="InstagramGate-error">{error}</p>}
 				<button className="InstagramGate-submit" type="submit">
-					Enter the board
+					Join
 				</button>
 			</form>
 		</div>

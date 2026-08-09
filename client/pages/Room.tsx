@@ -1,5 +1,5 @@
 import { useSync } from '@tldraw/sync'
-import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Editor, Tldraw } from 'tldraw'
 import { isAdminFromSearch } from '../admin'
@@ -20,6 +20,9 @@ export function Room() {
 	const [instagramHandle, setInstagramHandle] = useState<string | null>(() => getStoredInstagramHandle())
 	const [editor, setEditor] = useState<Editor | null>(null)
 	const [exportStatus, setExportStatus] = useState<string | null>(null)
+
+	const identityRef = useRef({ ownerId, isAdmin, instagramHandle })
+	identityRef.current = { ownerId, isAdmin, instagramHandle }
 
 	const store = useSync({
 		uri: `${window.location.origin}/api/connect/${roomId}`,
@@ -63,9 +66,16 @@ export function Room() {
 		return () => clearTimeout(timeout)
 	}, [exportStatus])
 
-	if (!instagramHandle) {
-		return <InstagramGate onJoined={setInstagramHandle} />
-	}
+	useEffect(() => {
+		if (!editor) return
+		editor.updateInstanceState({ isReadonly: !instagramHandle })
+		if (instagramHandle) {
+			editor.user.updateUserPreferences({
+				name: `@${instagramHandle}`,
+				colorScheme: 'dark',
+			})
+		}
+	}, [editor, instagramHandle])
 
 	return (
 		<RoomShell
@@ -86,14 +96,20 @@ export function Room() {
 				onMount={(mountedEditor) => {
 					setEditor(mountedEditor)
 
-					mountedEditor.user.updateUserPreferences({
-						name: `@${instagramHandle}`,
-						colorScheme: 'dark',
+					mountedEditor.updateInstanceState({
+						isReadonly: !identityRef.current.instagramHandle,
 					})
+
+					const handle = identityRef.current.instagramHandle
+					if (handle) {
+						mountedEditor.user.updateUserPreferences({
+							name: `@${handle}`,
+							colorScheme: 'dark',
+						})
+					}
 
 					mountedEditor.registerExternalAssetHandler('url', getBookmarkPreview)
 
-					// Force a single page — delete any extras that synced in.
 					const pages = mountedEditor.getPages()
 					if (pages.length > 1) {
 						for (const page of pages.slice(1)) {
@@ -105,6 +121,11 @@ export function Room() {
 						'shape',
 						(shape, source) => {
 							if (source !== 'user') return shape
+							const { ownerId: currentOwnerId, instagramHandle: currentHandle } =
+								identityRef.current
+							if (!currentHandle) {
+								throw new Error('Enter your Instagram handle to draw')
+							}
 
 							if (shape.type === 'image') {
 								const imageAlreadyExists = mountedEditor
@@ -121,8 +142,8 @@ export function Room() {
 								...shape,
 								meta: {
 									...shape.meta,
-									ownerId,
-									instagramHandle,
+									ownerId: currentOwnerId,
+									instagramHandle: currentHandle,
 								},
 							}
 						}
@@ -142,14 +163,16 @@ export function Room() {
 						'shape',
 						(prev, next, source) => {
 							if (source !== 'user') return next
+							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
+							if (admin) return next
 
-							// Non-admins cannot move/resize anything.
-							if (!isAdmin && isMovementChange(prev, next)) {
+							// Only the owner (or admin) can move/edit a shape.
+							if (prev.meta.ownerId && prev.meta.ownerId !== currentOwnerId) {
 								return prev
 							}
 
-							// Nobody edits someone else's content (prevents writing over each other).
-							if (!isAdmin && prev.meta.ownerId && prev.meta.ownerId !== ownerId) {
+							// Defensive: if somehow unowned and it's a move by non-admin stranger, block.
+							if (!prev.meta.ownerId && isMovementChange(prev, next)) {
 								return prev
 							}
 
@@ -161,21 +184,22 @@ export function Room() {
 						'shape',
 						(shape, source) => {
 							if (source !== 'user') return
-							if (isAdmin) return
-							if (shape.meta.ownerId === ownerId) return
+							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
+							if (admin) return
+							if (shape.meta.ownerId === currentOwnerId) return
 							return false
 						}
 					)
 
-					// After a local shape settles, reject it if it covers another visitor's work.
 					const disposeAfterChange = mountedEditor.sideEffects.registerAfterChangeHandler(
 						'shape',
 						(_prev, next, source) => {
-							if (source !== 'user' || isAdmin) return
-							if (next.meta.ownerId !== ownerId) return
-							if (!overlapsAnotherUsersShape(mountedEditor, next, ownerId)) return
+							if (source !== 'user') return
+							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
+							if (admin) return
+							if (next.meta.ownerId !== currentOwnerId) return
+							if (!overlapsAnotherUsersShape(mountedEditor, next, currentOwnerId)) return
 
-							// Draw strokes update continuously — only cull once they have meaningful bounds.
 							if (next.type === 'draw') {
 								const bounds = mountedEditor.getShapePageBounds(next)
 								if (!bounds || bounds.w < 24 || bounds.h < 24) return
@@ -188,9 +212,11 @@ export function Room() {
 					const disposeAfterCreate = mountedEditor.sideEffects.registerAfterCreateHandler(
 						'shape',
 						(shape, source) => {
-							if (source !== 'user' || isAdmin) return
+							if (source !== 'user') return
+							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
+							if (admin) return
 							if (shape.type === 'draw') return
-							if (!overlapsAnotherUsersShape(mountedEditor, shape, ownerId)) return
+							if (!overlapsAnotherUsersShape(mountedEditor, shape, currentOwnerId)) return
 							mountedEditor.deleteShapes([shape.id])
 						}
 					)
@@ -206,6 +232,7 @@ export function Room() {
 					}
 				}}
 			/>
+			{!instagramHandle && <InstagramGate onJoined={setInstagramHandle} />}
 		</RoomShell>
 	)
 }
@@ -221,7 +248,7 @@ function RoomShell({
 }: {
 	children: ReactNode
 	isAdmin: boolean
-	instagramHandle: string
+	instagramHandle: string | null
 	exportStatus: string | null
 	onExportPng: () => void
 	onExportPdf: () => void
@@ -229,7 +256,7 @@ function RoomShell({
 }) {
 	return (
 		<div className="RoomWrapper">
-			{isAdmin && (
+			{isAdmin && instagramHandle && (
 				<div className="RoomWrapper-adminBar">
 					<span className="RoomWrapper-adminBadge">Admin</span>
 					<span className="RoomWrapper-handle">@{instagramHandle}</span>

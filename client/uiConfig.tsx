@@ -11,7 +11,7 @@ import {
 	TLUiOverrides,
 } from 'tldraw'
 
-/** Only pointer, hand, pen, eraser, arrow, text, and image. */
+/** Pointer, hand, pen, eraser, arrow, text, and image. Zoom lives in NavigationPanel. */
 export function CommunalToolbar() {
 	return (
 		<DefaultToolbar>
@@ -29,7 +29,6 @@ export function CommunalToolbar() {
 export const communalComponents: TLComponents = {
 	Toolbar: CommunalToolbar,
 	PageMenu: null,
-	NavigationPanel: null,
 	MainMenu: null,
 	KeyboardShortcutsDialog: null,
 	HelperButtons: null,
@@ -38,6 +37,7 @@ export const communalComponents: TLComponents = {
 	TopPanel: null,
 	Minimap: null,
 	SharePanel: null,
+	// Keep NavigationPanel (zoom controls). Pages stay disabled via PageMenu + actions.
 }
 
 export const communalOverrides: TLUiOverrides = {
@@ -49,7 +49,7 @@ export const communalOverrides: TLUiOverrides = {
 		return tools
 	},
 	actions(_editor, actions) {
-		// Block multi-page / navigation actions from keyboard and menus.
+		// Block multi-page actions; keep zoom actions.
 		const blocked = [
 			'insert-page',
 			'create-page',

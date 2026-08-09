@@ -94,65 +94,51 @@ body {
 .InstagramGate {
 	position: absolute;
 	inset: 0;
+	z-index: 400;
 	display: grid;
 	place-items: center;
 	padding: 24px;
-	background:
-		radial-gradient(circle at top, rgba(255, 255, 255, 0.08), transparent 40%),
-		linear-gradient(180deg, #0a0a0a 0%, #000 100%);
+	background: rgba(0, 0, 0, 0.35);
+	backdrop-filter: blur(14px);
+	-webkit-backdrop-filter: blur(14px);
 }
 
 .InstagramGate-card {
-	width: min(100%, 420px);
-	padding: 32px 28px;
-	border: 1px solid var(--line);
-	background: rgba(12, 12, 12, 0.95);
-	box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
-}
-
-.InstagramGate-brand {
-	margin: 0 0 12px;
-	font-family: 'Syne', sans-serif;
-	font-size: clamp(28px, 6vw, 40px);
-	font-weight: 800;
-	letter-spacing: -0.04em;
-	line-height: 0.95;
+	width: min(100%, 320px);
+	padding: 18px 16px;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 12px;
+	background: rgba(18, 18, 18, 0.72);
+	box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
 }
 
 .InstagramGate-title {
-	margin: 0 0 8px;
-	font-size: 18px;
+	margin: 0 0 4px;
+	font-size: 15px;
 	font-weight: 700;
 }
 
 .InstagramGate-copy {
-	margin: 0 0 24px;
+	margin: 0 0 14px;
 	color: var(--muted);
-	font-size: 14px;
-	line-height: 1.45;
-}
-
-.InstagramGate-label {
-	display: block;
-	margin-bottom: 8px;
 	font-size: 12px;
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
-	color: var(--muted);
+	line-height: 1.4;
 }
 
 .InstagramGate-inputRow {
 	display: flex;
 	align-items: center;
 	gap: 4px;
-	margin-bottom: 12px;
-	border: 1px solid var(--line);
-	background: #080808;
-	padding: 0 12px;
+	margin-bottom: 10px;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 8px;
+	background: rgba(0, 0, 0, 0.35);
+	padding: 0 10px;
 }
 
 .InstagramGate-at {
 	color: var(--muted);
+	font-size: 13px;
 }
 
 .InstagramGate-input {
@@ -161,29 +147,31 @@ body {
 	background: transparent;
 	color: var(--text);
 	font: inherit;
-	font-size: 16px;
-	padding: 14px 0;
+	font-size: 14px;
+	padding: 10px 0;
 	outline: none;
 }
 
 .InstagramGate-error {
-	margin: 0 0 12px;
+	margin: 0 0 10px;
 	color: var(--danger);
-	font-size: 13px;
+	font-size: 12px;
 }
 
 .InstagramGate-submit {
 	width: 100%;
 	appearance: none;
 	border: 0;
-	background: var(--accent);
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.92);
 	color: #000;
 	font: inherit;
+	font-size: 13px;
 	font-weight: 700;
-	padding: 14px 16px;
+	padding: 10px 12px;
 	cursor: pointer;
 }
 
 .InstagramGate-submit:hover {
-	filter: brightness(0.92);
+	filter: brightness(0.94);
 }
