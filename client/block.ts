@@ -182,6 +182,7 @@ export function placeSampleBlock(editor: Editor, opts: PlaceSampleBlockOpts) {
 				font: 'sans',
 				textAlign: 'start',
 				scale: 1,
+				autoSize: false,
 				w: Math.min(280, innerW),
 				richText: toRichText(
 					`${opts.displayName}\nA memory from Fayetteville — CHECK A sample.`
