@@ -1,26 +1,32 @@
 import { useSync } from '@tldraw/sync'
-import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Editor, Tldraw } from 'tldraw'
 import { isAdminFromSearch } from '../admin'
 import { TLDRAW_LICENSE_KEY } from '../constants'
 import { clearBoard, exportBoardAsPdf, exportBoardAsPng } from '../exportBoard'
 import { getBookmarkPreview } from '../getBookmarkPreview'
+import { InstagramGate } from '../InstagramGate'
+import { getStoredInstagramHandle } from '../instagramHandle'
 import { multiplayerAssetStore } from '../multiplayerAssetStore'
 import { getOrCreateOwnerId } from '../ownerId'
+import { isMovementChange, overlapsAnotherUsersShape, shouldCullOnOverlap } from '../shapeGuards'
+import { BRAND_FOCUS_BOUNDS } from '../BrandBackdrop'
+import { communalComponents, communalOverrides } from '../uiConfig'
 
 export function Room() {
 	const { roomId } = useParams<{ roomId: string }>()
 	const ownerId = useMemo(() => getOrCreateOwnerId(), [])
 	const isAdmin = useMemo(() => isAdminFromSearch(), [])
+	const [instagramHandle, setInstagramHandle] = useState<string | null>(() => getStoredInstagramHandle())
 	const [editor, setEditor] = useState<Editor | null>(null)
 	const [exportStatus, setExportStatus] = useState<string | null>(null)
 
-	// Create a store connected to multiplayer.
+	const identityRef = useRef({ ownerId, isAdmin, instagramHandle })
+	identityRef.current = { ownerId, isAdmin, instagramHandle }
+
 	const store = useSync({
-		// We need to know the websockets URI...
 		uri: `${window.location.origin}/api/connect/${roomId}`,
-		// ...and how to handle static assets like images & videos
 		assets: multiplayerAssetStore,
 	})
 
@@ -61,43 +67,78 @@ export function Room() {
 		return () => clearTimeout(timeout)
 	}, [exportStatus])
 
+	useEffect(() => {
+		if (!editor) return
+		editor.updateInstanceState({ isReadonly: !instagramHandle })
+		if (instagramHandle) {
+			editor.user.updateUserPreferences({
+				name: `@${instagramHandle}`,
+				colorScheme: 'dark',
+			})
+		}
+		// Keep framing on the logo whenever identity/editor is ready.
+		editor.zoomToBounds(BRAND_FOCUS_BOUNDS, {
+			inset: 48,
+			targetZoom: 1,
+			animation: { duration: 0 },
+		})
+	}, [editor, instagramHandle])
+
 	return (
-		<RoomWrapper
-			roomId={roomId}
+		<RoomShell
 			isAdmin={isAdmin}
+			instagramHandle={instagramHandle}
 			exportStatus={exportStatus}
 			onExportPng={handleExportPng}
 			onExportPdf={handleExportPdf}
 			onClearBoard={handleClearBoard}
 		>
 			<Tldraw
-				// we can pass the connected store into the Tldraw component which will handle
-				// loading states & enable multiplayer UX like cursors & a presence menu
 				store={store}
 				licenseKey={TLDRAW_LICENSE_KEY}
-				options={{ deepLinks: true }}
+				colorScheme="dark"
+				components={communalComponents}
+				overrides={communalOverrides}
+				options={{ maxPages: 1 }}
 				onMount={(mountedEditor) => {
 					setEditor(mountedEditor)
 
-					// when the editor is ready, we need to register our bookmark unfurling service
+					mountedEditor.updateInstanceState({
+						isReadonly: !identityRef.current.instagramHandle,
+					})
+
+					const handle = identityRef.current.instagramHandle
+					if (handle) {
+						mountedEditor.user.updateUserPreferences({
+							name: `@${handle}`,
+							colorScheme: 'dark',
+						})
+					}
+
+					// Always open centered on the brand mark.
+					mountedEditor.zoomToBounds(BRAND_FOCUS_BOUNDS, {
+						inset: 48,
+						targetZoom: 1,
+						animation: { duration: 0 },
+					})
+
 					mountedEditor.registerExternalAssetHandler('url', getBookmarkPreview)
 
-					// Stamp anonymous ownership on every locally created shape.
+					const pages = mountedEditor.getPages()
+					if (pages.length > 1) {
+						for (const page of pages.slice(1)) {
+							mountedEditor.deletePage(page.id)
+						}
+					}
+
 					const disposeBeforeCreate = mountedEditor.sideEffects.registerBeforeCreateHandler(
 						'shape',
 						(shape, source) => {
-							// Only enforce local creation rules; remote sync must pass through.
 							if (source !== 'user') return shape
-
-							// One image at a time for the whole board (slot frees when deleted).
-							if (shape.type === 'image') {
-								const imageAlreadyExists = mountedEditor
-									.getCurrentPageShapes()
-									.some((existing) => existing.type === 'image')
-								if (imageAlreadyExists) {
-									// Throwing aborts the store transaction so the shape is never created.
-									throw new Error('Only one image is allowed on the board at a time')
-								}
+							const { ownerId: currentOwnerId, instagramHandle: currentHandle } =
+								identityRef.current
+							if (!currentHandle) {
+								throw new Error('Enter your Instagram handle to draw')
 							}
 
 							if (shape.meta.ownerId) return shape
@@ -106,111 +147,132 @@ export function Room() {
 								...shape,
 								meta: {
 									...shape.meta,
-									ownerId,
+									ownerId: currentOwnerId,
+									instagramHandle: currentHandle,
 								},
 							}
 						}
 					)
 
-					// Ownership-gated deletion (admin can delete anything).
+					const disposePageCreate = mountedEditor.sideEffects.registerBeforeCreateHandler(
+						'page',
+						(page, source) => {
+							if (source === 'user') {
+								throw new Error('Only one page is allowed')
+							}
+							return page
+						}
+					)
+
+					const disposeBeforeChange = mountedEditor.sideEffects.registerBeforeChangeHandler(
+						'shape',
+						(prev, next, source) => {
+							if (source !== 'user') return next
+							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
+							if (admin) return next
+
+							// Only the owner (or admin) can move/edit a shape.
+							if (prev.meta.ownerId && prev.meta.ownerId !== currentOwnerId) {
+								return prev
+							}
+
+							// Defensive: if somehow unowned and it's a move by non-admin stranger, block.
+							if (!prev.meta.ownerId && isMovementChange(prev, next)) {
+								return prev
+							}
+
+							return next
+						}
+					)
+
 					const disposeBeforeDelete = mountedEditor.sideEffects.registerBeforeDeleteHandler(
 						'shape',
 						(shape, source) => {
 							if (source !== 'user') return
-							if (isAdmin) return
-							if (shape.meta.ownerId === ownerId) return
+							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
+							if (admin) return
+							if (shape.meta.ownerId === currentOwnerId) return
 							return false
+						}
+					)
+
+					const disposeAfterChange = mountedEditor.sideEffects.registerAfterChangeHandler(
+						'shape',
+						(_prev, next, source) => {
+							if (source !== 'user') return
+							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
+							if (admin) return
+							if (next.meta.ownerId !== currentOwnerId) return
+							if (!shouldCullOnOverlap(next)) return
+							if (!overlapsAnotherUsersShape(mountedEditor, next, currentOwnerId)) return
+							mountedEditor.deleteShapes([next.id])
+						}
+					)
+
+					const disposeAfterCreate = mountedEditor.sideEffects.registerAfterCreateHandler(
+						'shape',
+						(shape, source) => {
+							if (source !== 'user') return
+							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
+							if (admin) return
+							if (!shouldCullOnOverlap(shape)) return
+							if (!overlapsAnotherUsersShape(mountedEditor, shape, currentOwnerId)) return
+							mountedEditor.deleteShapes([shape.id])
 						}
 					)
 
 					return () => {
 						disposeBeforeCreate()
+						disposePageCreate()
+						disposeBeforeChange()
 						disposeBeforeDelete()
+						disposeAfterChange()
+						disposeAfterCreate()
 						setEditor((current) => (current === mountedEditor ? null : current))
 					}
 				}}
 			/>
-		</RoomWrapper>
+			{!instagramHandle && <InstagramGate onJoined={setInstagramHandle} />}
+		</RoomShell>
 	)
 }
 
-function RoomWrapper({
+function RoomShell({
 	children,
-	roomId,
 	isAdmin,
+	instagramHandle,
 	exportStatus,
 	onExportPng,
 	onExportPdf,
 	onClearBoard,
 }: {
 	children: ReactNode
-	roomId?: string
 	isAdmin: boolean
+	instagramHandle: string | null
 	exportStatus: string | null
 	onExportPng: () => void
 	onExportPdf: () => void
 	onClearBoard: () => void
 }) {
-	const [didCopy, setDidCopy] = useState(false)
-
-	useEffect(() => {
-		if (!didCopy) return
-		const timeout = setTimeout(() => setDidCopy(false), 3000)
-		return () => clearTimeout(timeout)
-	}, [didCopy])
-
 	return (
 		<div className="RoomWrapper">
-			<div className="RoomWrapper-header">
-				<WifiIcon />
-				<div>{roomId}</div>
-				{isAdmin && <span className="RoomWrapper-adminBadge">Admin</span>}
-				<button
-					className="RoomWrapper-copy"
-					onClick={() => {
-						navigator.clipboard.writeText(window.location.href)
-						setDidCopy(true)
-					}}
-					aria-label="copy room link"
-				>
-					Copy link
-					{didCopy && <div className="RoomWrapper-copied">Copied!</div>}
-				</button>
-				{isAdmin && (
-					<div className="RoomWrapper-adminActions">
-						<button className="RoomWrapper-copy" onClick={onExportPng}>
-							Export PNG
-						</button>
-						<button className="RoomWrapper-copy" onClick={onExportPdf}>
-							Export PDF
-						</button>
-						<button className="RoomWrapper-copy" onClick={onClearBoard}>
-							Clear board
-						</button>
-					</div>
-				)}
-				{exportStatus && <div className="RoomWrapper-status">{exportStatus}</div>}
-			</div>
+			{isAdmin && instagramHandle && (
+				<div className="RoomWrapper-adminBar">
+					<span className="RoomWrapper-adminBadge">Admin</span>
+					<span className="RoomWrapper-handle">@{instagramHandle}</span>
+					<button className="RoomWrapper-button" onClick={onExportPng}>
+						Export PNG
+					</button>
+					<button className="RoomWrapper-button" onClick={onExportPdf}>
+						Export PDF
+					</button>
+					<button className="RoomWrapper-button" onClick={onClearBoard}>
+						Clear board
+					</button>
+					{exportStatus && <span className="RoomWrapper-status">{exportStatus}</span>}
+				</div>
+			)}
 			<div className="RoomWrapper-content">{children}</div>
 		</div>
-	)
-}
-
-function WifiIcon() {
-	return (
-		<svg
-			xmlns="http://www.w3.org/2000/svg"
-			fill="none"
-			viewBox="0 0 24 24"
-			strokeWidth="1.5"
-			stroke="currentColor"
-			width={16}
-		>
-			<path
-				strokeLinecap="round"
-				strokeLinejoin="round"
-				d="M8.288 15.038a5.25 5.25 0 0 1 7.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 0 1 1.06 0Z"
-			/>
-		</svg>
 	)
 }
