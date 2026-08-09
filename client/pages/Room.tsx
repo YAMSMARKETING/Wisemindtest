@@ -10,7 +10,7 @@ import { InstagramGate } from '../InstagramGate'
 import { getStoredInstagramHandle } from '../instagramHandle'
 import { multiplayerAssetStore } from '../multiplayerAssetStore'
 import { getOrCreateOwnerId } from '../ownerId'
-import { isMovementChange, overlapsAnotherUsersShape, shouldCullOnOverlap } from '../shapeGuards'
+import { isMovementChange } from '../shapeGuards'
 import { PAGE_BOUNDS } from '../pageGeometry'
 import { findOwnedReservedBlock, placeSampleBlock, shrinkBlockToContent } from '../block'
 import { communalComponents, communalOverrides } from '../uiConfig'
@@ -250,47 +250,11 @@ export function Room() {
 						}
 					)
 
-					const disposeAfterChange = mountedEditor.sideEffects.registerAfterChangeHandler(
-						'shape',
-						(_prev, next, source) => {
-							if (source !== 'user') return
-							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
-							if (admin) return
-							if (next.meta.ownerId !== currentOwnerId) return
-							if (!shouldCullOnOverlap(mountedEditor, next)) return
-							if (!overlapsAnotherUsersShape(mountedEditor, next, currentOwnerId)) return
-
-							// Small draw strokes are noisy; only cull once they cover real area.
-							if (next.type === 'draw') {
-								const bounds = mountedEditor.getShapePageBounds(next)
-								if (!bounds || bounds.w < 24 || bounds.h < 24) return
-							}
-
-							mountedEditor.deleteShapes([next.id])
-						}
-					)
-
-					const disposeAfterCreate = mountedEditor.sideEffects.registerAfterCreateHandler(
-						'shape',
-						(shape, source) => {
-							if (source !== 'user') return
-							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
-							if (admin) return
-							// Freehand strokes grow while drawing; don't delete on create.
-							if (shape.type === 'draw') return
-							if (!shouldCullOnOverlap(mountedEditor, shape)) return
-							if (!overlapsAnotherUsersShape(mountedEditor, shape, currentOwnerId)) return
-							mountedEditor.deleteShapes([shape.id])
-						}
-					)
-
 					return () => {
 						disposeBeforeCreate()
 						disposePageCreate()
 						disposeBeforeChange()
 						disposeBeforeDelete()
-						disposeAfterChange()
-						disposeAfterCreate()
 						setEditor((current) => (current === mountedEditor ? null : current))
 					}
 				}}
