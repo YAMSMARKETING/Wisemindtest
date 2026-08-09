@@ -11,6 +11,7 @@ import { getStoredInstagramHandle } from '../instagramHandle'
 import { multiplayerAssetStore } from '../multiplayerAssetStore'
 import { getOrCreateOwnerId } from '../ownerId'
 import { isMovementChange, overlapsAnotherUsersShape } from '../shapeGuards'
+import { BRAND_FOCUS_BOUNDS } from '../BrandBackdrop'
 import { communalComponents, communalOverrides } from '../uiConfig'
 
 export function Room() {
@@ -75,6 +76,12 @@ export function Room() {
 				colorScheme: 'dark',
 			})
 		}
+		// Keep framing on the logo whenever identity/editor is ready.
+		editor.zoomToBounds(BRAND_FOCUS_BOUNDS, {
+			inset: 48,
+			targetZoom: 1,
+			animation: { duration: 0 },
+		})
 	}, [editor, instagramHandle])
 
 	return (
@@ -107,6 +114,13 @@ export function Room() {
 							colorScheme: 'dark',
 						})
 					}
+
+					// Always open centered on the brand mark.
+					mountedEditor.zoomToBounds(BRAND_FOCUS_BOUNDS, {
+						inset: 48,
+						targetZoom: 1,
+						animation: { duration: 0 },
+					})
 
 					mountedEditor.registerExternalAssetHandler('url', getBookmarkPreview)
 
