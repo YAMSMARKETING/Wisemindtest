@@ -1,18 +1,10 @@
-import {
-	COLUMN_COUNT,
-	COLUMN_WIDTH,
-	PAGE_HEIGHT,
-	PAGE_ORIGIN,
-	PAGE_WIDTH,
-} from './pageGeometry'
+import { PAGE_HEIGHT, PAGE_ORIGIN, PAGE_WIDTH } from './pageGeometry'
 
 /**
- * Non-interactive page frame + column guides drawn behind shapes (OnTheCanvas).
- * Print master is SVG of this frame; guides are compose-time only.
+ * Non-interactive page frame drawn behind shapes (OnTheCanvas).
+ * No column guides — free placement layout. SVG of this frame is the print master.
  */
 export function PageFrame() {
-	const columns = Array.from({ length: COLUMN_COUNT }, (_, i) => i)
-
 	return (
 		<div
 			className="PageFrame"
@@ -27,7 +19,6 @@ export function PageFrame() {
 				userSelect: 'none',
 			}}
 		>
-			{/* Page surface */}
 			<div
 				style={{
 					position: 'absolute',
@@ -37,23 +28,6 @@ export function PageFrame() {
 				}}
 			/>
 
-			{/* Column guides */}
-			{columns.map((i) => (
-				<div
-					key={i}
-					style={{
-						position: 'absolute',
-						left: i * COLUMN_WIDTH,
-						top: 0,
-						width: COLUMN_WIDTH,
-						height: '100%',
-						borderRight: i < COLUMN_COUNT - 1 ? '1px solid rgba(40, 32, 20, 0.08)' : undefined,
-						boxSizing: 'border-box',
-					}}
-				/>
-			))}
-
-			{/* Outer rule */}
 			<div
 				style={{
 					position: 'absolute',
@@ -76,7 +50,7 @@ export function PageFrame() {
 					color: 'rgba(40, 32, 20, 0.45)',
 				}}
 			>
-				Fayetteville Scrapbook · {PAGE_WIDTH}×{PAGE_HEIGHT} · {COLUMN_COUNT} cols
+				Fayetteville Scrapbook · {PAGE_WIDTH}×{PAGE_HEIGHT}
 			</div>
 		</div>
 	)
