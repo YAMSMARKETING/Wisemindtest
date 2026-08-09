@@ -28,10 +28,14 @@ const router = AutoRouter<IRequest, [env: Env, ctx: ExecutionContext]>({
 
 	// bookmarks need to extract metadata from pasted URLs:
 	.get('/api/unfurl', handleUnfurlRequest)
-	.all('*', () => {
-		return new Response('Not found', { status: 404 })
-	})
 
 export default {
-	fetch: router.fetch,
+	async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+		const url = new URL(request.url)
+		if (url.pathname.startsWith('/api/')) {
+			return router.fetch(request, env, ctx)
+		}
+		// Serve the Vite SPA shell for all non-API routes (deep links, admin query, etc.).
+		return env.ASSETS.fetch(request)
+	},
 }
