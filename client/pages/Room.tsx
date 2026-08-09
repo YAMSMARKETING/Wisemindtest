@@ -205,6 +205,13 @@ export function Room() {
 							if (next.meta.ownerId !== currentOwnerId) return
 							if (!shouldCullOnOverlap(next)) return
 							if (!overlapsAnotherUsersShape(mountedEditor, next, currentOwnerId)) return
+
+							// Small draw strokes are noisy; only cull once they cover real area.
+							if (next.type === 'draw') {
+								const bounds = mountedEditor.getShapePageBounds(next)
+								if (!bounds || bounds.w < 24 || bounds.h < 24) return
+							}
+
 							mountedEditor.deleteShapes([next.id])
 						}
 					)
@@ -215,6 +222,8 @@ export function Room() {
 							if (source !== 'user') return
 							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
 							if (admin) return
+							// Freehand strokes grow while drawing; don't delete on create.
+							if (shape.type === 'draw') return
 							if (!shouldCullOnOverlap(shape)) return
 							if (!overlapsAnotherUsersShape(mountedEditor, shape, currentOwnerId)) return
 							mountedEditor.deleteShapes([shape.id])

@@ -40,5 +40,5 @@ export function isMovementChange(prev: TLShape, next: TLShape) {
  * on existing content and would otherwise disappear immediately.
  */
 export function shouldCullOnOverlap(shape: TLShape) {
-	return shape.type !== 'image' && shape.type !== 'video' && shape.type !== 'draw'
+	return shape.type !== 'image' && shape.type !== 'video'
 }
