@@ -5,6 +5,7 @@ declare namespace Cloudflare {
 	interface Env {
 		TLDRAW_DURABLE_OBJECT: DurableObjectNamespace<import('./worker/worker').TldrawDurableObject>
 		TLDRAW_BUCKET: R2Bucket
+		ASSETS: { fetch: typeof fetch }
 	}
 }
 interface Env extends Cloudflare.Env {}
