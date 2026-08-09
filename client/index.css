@@ -82,6 +82,26 @@ body {
 	border: 1px solid var(--black-transparent-lighter);
 }
 
+.RoomWrapper-adminBadge {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--focus);
+}
+
+.RoomWrapper-adminActions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+}
+
+.RoomWrapper-status {
+	font-size: 12px;
+	color: var(--black-transparent-dark);
+}
+
 .RoomWrapper-content {
 	position: relative;
 	flex: 1;

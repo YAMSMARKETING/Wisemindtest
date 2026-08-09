@@ -1,10 +1,7 @@
 import { Navigate } from 'react-router-dom'
-import { uniqueId } from 'tldraw'
-import { getLocalStorageItem, setLocalStorageItem } from '../localStorage'
-
-const myLocalRoomId = getLocalStorageItem('my-local-room-id') ?? 'test-room-' + uniqueId()
-setLocalStorageItem('my-local-room-id', myLocalRoomId)
+import { SHARED_ROOM_ID } from '../constants'
 
 export function Root() {
-	return <Navigate to={`/${myLocalRoomId}`} />
+	// One shared board for every visitor — no per-browser room ids.
+	return <Navigate to={`/${SHARED_ROOM_ID}`} replace />
 }

@@ -1,5 +1,8 @@
 import { error, IRequest } from 'itty-router'
 
+/** Keep in sync with client/constants.ts MAX_UPLOAD_BYTES (5 MB). */
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+
 // assets are stored in the bucket under the /uploads path
 function getAssetObjectName(uploadId: string) {
 	return `uploads/${uploadId.replace(/[^a-zA-Z0-9_-]+/g, '_')}`
@@ -20,11 +23,24 @@ export async function handleAssetUpload(request: IRequest, env: Env) {
 		return error(400, 'Invalid content type')
 	}
 
+	const contentLengthHeader = request.headers.get('content-length')
+	if (contentLengthHeader) {
+		const contentLength = Number(contentLengthHeader)
+		if (Number.isFinite(contentLength) && contentLength > MAX_UPLOAD_BYTES) {
+			return error(413, `File too large. Max upload size is ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB.`)
+		}
+	}
+
 	if (await env.TLDRAW_BUCKET.head(objectName)) {
 		return error(409, 'Upload already exists')
 	}
 
-	await env.TLDRAW_BUCKET.put(objectName, request.body, {
+	const body = await request.arrayBuffer()
+	if (body.byteLength > MAX_UPLOAD_BYTES) {
+		return error(413, `File too large. Max upload size is ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB.`)
+	}
+
+	await env.TLDRAW_BUCKET.put(objectName, body, {
 		httpMetadata: request.headers,
 	})
 
