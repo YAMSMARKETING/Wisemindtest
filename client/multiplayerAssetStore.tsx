@@ -1,6 +1,23 @@
 import { TLAssetStore, uniqueId } from 'tldraw'
 import { MAX_UPLOAD_BYTES } from './constants'
 
+function guessContentType(file: File) {
+	if (file.type && file.type !== 'application/octet-stream') return file.type
+
+	const name = file.name.toLowerCase()
+	if (name.endsWith('.png')) return 'image/png'
+	if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'image/jpeg'
+	if (name.endsWith('.gif')) return 'image/gif'
+	if (name.endsWith('.webp')) return 'image/webp'
+	if (name.endsWith('.svg')) return 'image/svg+xml'
+	if (name.endsWith('.heic')) return 'image/heic'
+	if (name.endsWith('.heif')) return 'image/heif'
+	if (name.endsWith('.mp4')) return 'video/mp4'
+	if (name.endsWith('.webm')) return 'video/webm'
+	if (name.endsWith('.mov')) return 'video/quicktime'
+	return file.type || 'application/octet-stream'
+}
+
 // How does our server handle assets like images and videos?
 export const multiplayerAssetStore: TLAssetStore = {
 	// to upload an asset, we...
@@ -13,15 +30,27 @@ export const multiplayerAssetStore: TLAssetStore = {
 		const id = uniqueId()
 		const objectName = `${id}-${file.name}`.replace(/[^a-zA-Z0-9.]/g, '-')
 		const url = `/api/uploads/${objectName}`
+		const contentType = guessContentType(file)
 
-		// ...POST it to out worker to upload it...
+		// ...POST it to our worker to upload it...
+		// Always set Content-Type: iOS often gives File.type as empty / octet-stream.
 		const response = await fetch(url, {
 			method: 'POST',
 			body: file,
+			headers: {
+				'Content-Type': contentType,
+			},
 		})
 
 		if (!response.ok) {
-			throw new Error(`Failed to upload asset: ${response.statusText}`)
+			let detail = response.statusText
+			try {
+				const data = (await response.json()) as { error?: string }
+				if (data?.error) detail = data.error
+			} catch {
+				// ignore parse errors
+			}
+			throw new Error(`Failed to upload asset: ${detail}`)
 		}
 
 		// ...and return the URL to be stored with the asset record.
