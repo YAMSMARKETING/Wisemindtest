@@ -83,12 +83,13 @@ body {
 	position: absolute;
 	z-index: 500;
 	top: 12px;
-	right: 12px;
-	left: auto;
+	left: 50%;
+	right: auto;
+	transform: translateX(-50%);
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
-	justify-content: flex-end;
+	justify-content: center;
 	gap: 8px;
 	padding: 8px 10px;
 	border: 1px solid var(--line);
@@ -261,8 +262,9 @@ body {
 	position: absolute;
 	z-index: 520;
 	top: calc(100% + 8px);
-	right: 0;
-	left: auto;
+	left: 50%;
+	right: auto;
+	transform: translateX(-50%);
 	width: min(400px, calc(100vw - 24px));
 	max-height: min(480px, 70vh);
 	overflow: auto;
