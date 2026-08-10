@@ -12,7 +12,6 @@ import {
 	useIsToolSelected,
 	useTools,
 } from 'tldraw'
-import { PageFrame } from './PageFrame'
 import { StickerPicker } from './StickerPicker'
 import { ToastBridge } from './ToastBridge'
 
@@ -40,13 +39,9 @@ export function CommunalToolbar() {
 	)
 }
 
-function OnTheCanvasLayer() {
-	return <PageFrame />
-}
-
 export const communalComponents: TLComponents = {
 	Toolbar: CommunalToolbar,
-	OnTheCanvas: OnTheCanvasLayer,
+	OnTheCanvas: null,
 	HelperButtons: ToastBridge,
 	PageMenu: null,
 	MainMenu: null,
@@ -126,7 +121,7 @@ export const adminOverrides: TLUiOverrides = {
 }
 
 export const adminComponents: TLComponents = {
-	OnTheCanvas: OnTheCanvasLayer,
+	OnTheCanvas: null,
 	HelperButtons: ToastBridge,
 	PageMenu: null,
 	Minimap: null,

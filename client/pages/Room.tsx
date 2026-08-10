@@ -14,7 +14,6 @@ import { apiClearLayout } from '../layoutApi'
 import { apiCheckBan, apiRegisterContributor } from '../moderationApi'
 import { multiplayerAssetStore } from '../multiplayerAssetStore'
 import { getOrCreateOwnerId } from '../ownerId'
-import { PAGE_BOUNDS } from '../pageGeometry'
 import { setScrapbookOwnerKey } from '../scrapbookSession'
 import { canUserMutateShape, isMovementChange } from '../shapeGuards'
 import { StickerTool } from '../StickerTool'
@@ -156,10 +155,6 @@ export function Room() {
 				colorScheme: 'dark',
 			})
 		}
-		editor.zoomToBounds(PAGE_BOUNDS, {
-			inset: 48,
-			animation: { duration: 0 },
-		})
 	}, [canCompose, displayName, editor])
 
 	const components = isAdmin ? adminComponents : communalComponents
@@ -201,11 +196,6 @@ export function Room() {
 							colorScheme: 'dark',
 						})
 					}
-
-					mountedEditor.zoomToBounds(PAGE_BOUNDS, {
-						inset: 48,
-						animation: { duration: 0 },
-					})
 
 					mountedEditor.registerExternalAssetHandler('url', getBookmarkPreview)
 
@@ -380,12 +370,14 @@ function RoomShell({
 	return (
 		<div className="RoomWrapper">
 			{canCompose && (
-				<div className="RoomWrapper-checkBar">
-					<span className="RoomWrapper-adminBadge">CHECK D</span>
-					{displayName && <span className="RoomWrapper-handle">{displayName}</span>}
-					{isAdmin && roomId && (
+				<div className={`RoomWrapper-checkBar${isAdmin ? ' RoomWrapper-checkBar--admin' : ''}`}>
+					{isAdmin ? (
 						<>
-							<AdminSubmissionsPanel roomId={roomId} editor={editor} onStatus={onStatus} />
+							<span className="RoomWrapper-adminBadge">Admin</span>
+							{displayName && <span className="RoomWrapper-handle">{displayName}</span>}
+							{roomId && (
+								<AdminSubmissionsPanel roomId={roomId} editor={editor} onStatus={onStatus} />
+							)}
 							<button className="RoomWrapper-button" onClick={onExportPng}>
 								Export PNG
 							</button>
@@ -396,6 +388,8 @@ function RoomShell({
 								Clear board
 							</button>
 						</>
+					) : (
+						displayName && <span className="RoomWrapper-handle">{displayName}</span>
 					)}
 					{(status || exportStatus) && (
 						<span className="RoomWrapper-status">{status || exportStatus}</span>

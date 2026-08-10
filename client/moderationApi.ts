@@ -74,6 +74,19 @@ export async function apiBanContributor(
 	return (await res.json()) as { ok: true }
 }
 
+export async function apiUnbanContributor(
+	roomId: string,
+	body: { ownerKey?: string; handle?: string }
+) {
+	const res = await fetch(`/api/moderation/${roomId}/unban`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(body),
+	})
+	if (!res.ok) throw new Error(await readError(res))
+	return (await res.json()) as { ok: true }
+}
+
 export async function apiCheckBan(
 	roomId: string,
 	opts: { ownerKey: string; handle?: string | null; displayName?: string | null }

@@ -81,20 +81,25 @@ body {
 .RoomWrapper-adminBar,
 .RoomWrapper-checkBar {
 	position: absolute;
-	z-index: 300;
+	z-index: 500;
 	top: 12px;
-	left: 12px;
 	right: 12px;
+	left: auto;
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
+	justify-content: flex-end;
 	gap: 8px;
 	padding: 8px 10px;
 	border: 1px solid var(--line);
-	background: rgba(10, 10, 10, 0.88);
+	background: rgba(10, 10, 10, 0.92);
 	backdrop-filter: blur(8px);
-	max-width: calc(100% - 24px);
+	max-width: min(520px, calc(100% - 24px));
 	width: fit-content;
+}
+
+.RoomWrapper-checkBar--admin {
+	max-width: min(640px, calc(100% - 24px));
 }
 
 .RoomWrapper-adminBadge {
@@ -254,16 +259,43 @@ body {
 
 .AdminSubmissions-panel {
 	position: absolute;
-	z-index: 320;
+	z-index: 520;
 	top: calc(100% + 8px);
-	left: 0;
-	width: min(360px, calc(100vw - 48px));
-	max-height: min(420px, 60vh);
+	right: 0;
+	left: auto;
+	width: min(400px, calc(100vw - 24px));
+	max-height: min(480px, 70vh);
 	overflow: auto;
 	padding: 10px;
 	border: 1px solid var(--line);
-	background: rgba(10, 10, 10, 0.94);
+	background: rgba(10, 10, 10, 0.96);
 	backdrop-filter: blur(8px);
+	box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.AdminSubmissions-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 10px;
+}
+
+.AdminSubmissions-tab {
+	appearance: none;
+	border: 1px solid var(--line);
+	background: #151515;
+	color: var(--muted);
+	padding: 6px 10px;
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.AdminSubmissions-tab.is-active {
+	color: var(--text);
+	border-color: #666;
+	background: #222;
 }
 
 .AdminSubmissions-header {
@@ -315,6 +347,11 @@ body {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px;
+}
+
+.AdminSubmissions-actions .RoomWrapper-button:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
 }
 
 .StickerPicker {

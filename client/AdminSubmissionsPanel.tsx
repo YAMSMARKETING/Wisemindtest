@@ -9,6 +9,7 @@ import {
 import {
 	apiBanContributor,
 	apiGetModeration,
+	apiUnbanContributor,
 	type BanRecord,
 	type ContributorRecord,
 } from './moderationApi'
@@ -20,6 +21,15 @@ type ContributorRow = {
 	handle: string | null
 	shapeCount: number
 	fromServer: boolean
+}
+
+type PanelTab = 'contributors' | 'bans'
+
+function banLabel(ban: BanRecord) {
+	if (ban.displayName) return ban.displayName
+	if (ban.handle) return `@${ban.handle}`
+	if (ban.ownerKey) return `${ban.ownerKey.slice(0, 8)}…`
+	return 'Unknown'
 }
 
 function buildRows(
@@ -82,6 +92,7 @@ export function AdminSubmissionsPanel({
 	onStatus: (msg: string) => void
 }) {
 	const [open, setOpen] = useState(false)
+	const [tab, setTab] = useState<PanelTab>('contributors')
 	const [contributors, setContributors] = useState<Record<string, ContributorRecord>>({})
 	const [bans, setBans] = useState<BanRecord[]>([])
 	const [loading, setLoading] = useState(false)
@@ -95,7 +106,7 @@ export function AdminSubmissionsPanel({
 			setBans(data.bans)
 			setTick((n) => n + 1)
 		} catch (error) {
-			onStatus(error instanceof Error ? error.message : 'Failed to load contributors')
+			onStatus(error instanceof Error ? error.message : 'Failed to load moderation')
 		} finally {
 			setLoading(false)
 		}
@@ -108,7 +119,6 @@ export function AdminSubmissionsPanel({
 		return () => window.clearInterval(id)
 	}, [open, refresh])
 
-	// Recompute shape counts when the editor store changes while panel is open
 	useEffect(() => {
 		if (!open || !editor) return
 		const unsub = editor.store.listen(() => setTick((n) => n + 1), {
@@ -121,7 +131,6 @@ export function AdminSubmissionsPanel({
 	const rows = useMemo(
 		() => buildRows(editor, contributors),
 		// tick forces recount when shapes change
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[contributors, editor, tick]
 	)
 
@@ -169,6 +178,21 @@ export function AdminSubmissionsPanel({
 		}
 	}
 
+	async function unban(ban: BanRecord) {
+		const label = banLabel(ban)
+		if (!window.confirm(`Unban ${label}?`)) return
+		try {
+			await apiUnbanContributor(roomId, {
+				ownerKey: ban.ownerKey,
+				handle: ban.handle,
+			})
+			onStatus(`Unbanned ${label}`)
+			await refresh()
+		} catch (error) {
+			onStatus(error instanceof Error ? error.message : 'Unban failed')
+		}
+	}
+
 	return (
 		<div className="AdminSubmissions">
 			<button
@@ -176,62 +200,110 @@ export function AdminSubmissionsPanel({
 				className="RoomWrapper-button"
 				onClick={() => setOpen((v) => !v)}
 			>
-				{open ? 'Hide contributors' : 'Contributors'}
+				{open ? 'Hide panel' : 'Moderation'}
 			</button>
 			{open && (
 				<div className="AdminSubmissions-panel">
-					<div className="AdminSubmissions-header">
-						<span>
-							{rows.length} contributor{rows.length === 1 ? '' : 's'} · {bans.length} ban
-							{bans.length === 1 ? '' : 's'}
-						</span>
-						<button type="button" className="RoomWrapper-button" onClick={() => void refresh()}>
+					<div className="AdminSubmissions-tabs">
+						<button
+							type="button"
+							className={`AdminSubmissions-tab${tab === 'contributors' ? ' is-active' : ''}`}
+							onClick={() => setTab('contributors')}
+						>
+							Contributors ({rows.length})
+						</button>
+						<button
+							type="button"
+							className={`AdminSubmissions-tab${tab === 'bans' ? ' is-active' : ''}`}
+							onClick={() => setTab('bans')}
+						>
+							Ban list ({bans.length})
+						</button>
+						<button
+							type="button"
+							className="RoomWrapper-button"
+							onClick={() => void refresh()}
+						>
 							{loading ? '…' : 'Refresh'}
 						</button>
 					</div>
-					<ul className="AdminSubmissions-list">
-						{rows.length === 0 && (
-							<li className="AdminSubmissions-empty">No contributors yet</li>
-						)}
-						{rows.map((row) => (
-							<li key={row.ownerKey} className="AdminSubmissions-row">
-								<div className="AdminSubmissions-meta">
-									<strong>{row.displayName}</strong>
-									<span className="AdminSubmissions-sub">
-										{row.shapeCount} shape{row.shapeCount === 1 ? '' : 's'} ·{' '}
-										{row.ownerKey.slice(0, 8)}…
-										{row.handle ? ` · @${row.handle}` : ''}
-										{row.name ? ` · ${row.name}` : ''}
-									</span>
-								</div>
-								<div className="AdminSubmissions-actions">
-									<button
-										type="button"
-										className="RoomWrapper-button"
-										onClick={() => jumpTo(row)}
-										disabled={row.shapeCount === 0}
-									>
-										Jump
-									</button>
-									<button
-										type="button"
-										className="RoomWrapper-button"
-										onClick={() => void deleteContent(row)}
-										disabled={row.shapeCount === 0}
-									>
-										Delete content
-									</button>
-									<button
-										type="button"
-										className="RoomWrapper-button RoomWrapper-button--danger"
-										onClick={() => void deleteAndBan(row)}
-									>
-										Delete + ban
-									</button>
-								</div>
-							</li>
-						))}
-					</ul>
+
+					{tab === 'contributors' ? (
+						<ul className="AdminSubmissions-list">
+							{rows.length === 0 && (
+								<li className="AdminSubmissions-empty">No contributors yet</li>
+							)}
+							{rows.map((row) => (
+								<li key={row.ownerKey} className="AdminSubmissions-row">
+									<div className="AdminSubmissions-meta">
+										<strong>{row.displayName}</strong>
+										<span className="AdminSubmissions-sub">
+											{row.shapeCount} shape{row.shapeCount === 1 ? '' : 's'} ·{' '}
+											{row.ownerKey.slice(0, 8)}…
+											{row.handle ? ` · @${row.handle}` : ''}
+											{row.name ? ` · ${row.name}` : ''}
+										</span>
+									</div>
+									<div className="AdminSubmissions-actions">
+										<button
+											type="button"
+											className="RoomWrapper-button"
+											onClick={() => jumpTo(row)}
+											disabled={row.shapeCount === 0}
+										>
+											Jump
+										</button>
+										<button
+											type="button"
+											className="RoomWrapper-button"
+											onClick={() => void deleteContent(row)}
+											disabled={row.shapeCount === 0}
+										>
+											Delete content
+										</button>
+										<button
+											type="button"
+											className="RoomWrapper-button RoomWrapper-button--danger"
+											onClick={() => void deleteAndBan(row)}
+										>
+											Delete + ban
+										</button>
+									</div>
+								</li>
+							))}
+						</ul>
+					) : (
+						<ul className="AdminSubmissions-list">
+							{bans.length === 0 && (
+								<li className="AdminSubmissions-empty">No bans yet</li>
+							)}
+							{bans.map((ban, index) => (
+								<li
+									key={`${ban.ownerKey ?? ''}-${ban.handle ?? ''}-${ban.bannedAt}-${index}`}
+									className="AdminSubmissions-row"
+								>
+									<div className="AdminSubmissions-meta">
+										<strong>{banLabel(ban)}</strong>
+										<span className="AdminSubmissions-sub">
+											{ban.reason ? `${ban.reason} · ` : ''}
+											{new Date(ban.bannedAt).toLocaleString()}
+											{ban.ownerKey ? ` · ${ban.ownerKey.slice(0, 8)}…` : ''}
+											{ban.handle ? ` · @${ban.handle}` : ''}
+										</span>
+									</div>
+									<div className="AdminSubmissions-actions">
+										<button
+											type="button"
+											className="RoomWrapper-button"
+											onClick={() => void unban(ban)}
+										>
+											Unban
+										</button>
+									</div>
+								</li>
+							))}
+						</ul>
+					)}
 				</div>
 			)}
 		</div>
