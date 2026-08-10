@@ -2,8 +2,10 @@ import { useSync } from '@tldraw/sync'
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Editor, Tldraw, react } from 'tldraw'
+import { AdminSubmissionsPanel } from '../AdminSubmissionsPanel'
 import { isAdminFromSearch } from '../admin'
 import {
+	countOwnedMedia,
 	findOwnedReservedBlock,
 	getShapeOwnerKey,
 	isScrapbookTile,
@@ -11,11 +13,12 @@ import {
 	submitBlockOnServer,
 } from '../block'
 import { TLDRAW_LICENSE_KEY } from '../constants'
+import { EntryGate } from '../EntryGate'
 import { clearBoard, exportBoardAsPdf, exportBoardAsPng } from '../exportBoard'
 import { getBookmarkPreview } from '../getBookmarkPreview'
-import { InstagramGate } from '../InstagramGate'
-import { getStoredInstagramHandle } from '../instagramHandle'
+import { clearStoredIdentity, getStoredIdentity, type StoredIdentity } from '../identity'
 import { apiClearLayout } from '../layoutApi'
+import { apiCheckBan, apiRegisterContributor } from '../moderationApi'
 import { multiplayerAssetStore } from '../multiplayerAssetStore'
 import { getOrCreateOwnerId } from '../ownerId'
 import { PAGE_BOUNDS } from '../pageGeometry'
@@ -27,7 +30,6 @@ import {
 } from '../shapeGuards'
 import { StickerTool } from '../StickerTool'
 import { MAX_IMAGES_PER_SUBMISSION, MAX_STICKERS_PER_SUBMISSION } from '../stickers'
-import { countOwnedMedia } from '../block'
 import { showToast } from '../toastBridge'
 import {
 	adminComponents,
@@ -40,25 +42,75 @@ export function Room() {
 	const { roomId } = useParams<{ roomId: string }>()
 	const ownerId = useMemo(() => getOrCreateOwnerId(), [])
 	const isAdmin = useMemo(() => isAdminFromSearch(), [])
-	const [instagramHandle, setInstagramHandle] = useState<string | null>(() =>
-		getStoredInstagramHandle()
-	)
+	const [identity, setIdentity] = useState<StoredIdentity | null>(() => getStoredIdentity())
+	const [bannedMessage, setBannedMessage] = useState<string | null>(null)
 	const [editor, setEditor] = useState<Editor | null>(null)
 	const [exportStatus, setExportStatus] = useState<string | null>(null)
 	const [status, setStatus] = useState<string | null>(null)
 
-	const identityRef = useRef({ ownerId, isAdmin, instagramHandle })
-	identityRef.current = { ownerId, isAdmin, instagramHandle }
+	const displayName = identity?.displayName ?? (isAdmin ? 'admin' : null)
+	const canCompose = isAdmin || !!identity
+
+	const identityRef = useRef({ ownerId, isAdmin, identity, displayName })
+	identityRef.current = { ownerId, isAdmin, identity, displayName }
 
 	useEffect(() => {
 		setScrapbookOwnerKey(ownerId)
 		return () => setScrapbookOwnerKey(null)
 	}, [ownerId])
 
+	// Ban check + contributor register once identity is known
+	useEffect(() => {
+		if (!roomId || !identity || isAdmin) return
+		let cancelled = false
+
+		;(async () => {
+			try {
+				const { banned } = await apiCheckBan(roomId, {
+					ownerKey: ownerId,
+					handle: identity.handle,
+					displayName: identity.displayName,
+				})
+				if (cancelled) return
+				if (banned) {
+					setBannedMessage('You are banned from this scrapbook')
+					clearStoredIdentity()
+					setIdentity(null)
+					return
+				}
+				await apiRegisterContributor(roomId, {
+					ownerKey: ownerId,
+					name: identity.name,
+					handle: identity.handle,
+					displayName: identity.displayName,
+				})
+			} catch (error) {
+				if (cancelled) return
+				const message = error instanceof Error ? error.message : 'Could not join'
+				if (/banned/i.test(message)) {
+					setBannedMessage(message)
+					clearStoredIdentity()
+					setIdentity(null)
+				} else {
+					setStatus(message)
+				}
+			}
+		})()
+
+		return () => {
+			cancelled = true
+		}
+	}, [identity, isAdmin, ownerId, roomId])
+
 	const store = useSync({
-		uri: `${window.location.origin}/api/connect/${roomId}`,
+		uri: `${window.location.origin}/api/connect/${roomId}?ownerKey=${encodeURIComponent(ownerId)}`,
 		assets: multiplayerAssetStore,
 	})
+
+	const handleJoined = useCallback((next: StoredIdentity) => {
+		setBannedMessage(null)
+		setIdentity(next)
+	}, [])
 
 	const handleExportPng = useCallback(async () => {
 		if (!editor) return
@@ -98,12 +150,12 @@ export function Room() {
 	}, [editor, roomId])
 
 	const handlePlaceBlock = useCallback(async () => {
-		if (!editor || !instagramHandle || !roomId) return
+		if (!editor || !displayName || !roomId) return
 		try {
 			const result = await placeBlockOnServer(editor, {
 				roomId,
 				ownerKey: ownerId,
-				displayName: `@${instagramHandle}`,
+				displayName,
 			})
 			if (result.alreadyHad) {
 				setStatus('You already have a reserved block')
@@ -118,10 +170,10 @@ export function Room() {
 			console.error(error)
 			setStatus(error instanceof Error ? error.message : 'Could not place block')
 		}
-	}, [editor, instagramHandle, ownerId, roomId])
+	}, [displayName, editor, ownerId, roomId])
 
 	const handleSubmitBlock = useCallback(async () => {
-		if (!editor || !instagramHandle || !roomId) return
+		if (!editor || !displayName || !roomId) return
 		try {
 			const blockId = findOwnedReservedBlock(editor, ownerId)
 			if (!blockId) {
@@ -140,7 +192,7 @@ export function Room() {
 			console.error(error)
 			setStatus(error instanceof Error ? error.message : 'Submit failed')
 		}
-	}, [editor, instagramHandle, ownerId, roomId])
+	}, [displayName, editor, ownerId, roomId])
 
 	useEffect(() => {
 		if (!exportStatus && !status) return
@@ -153,10 +205,10 @@ export function Room() {
 
 	useEffect(() => {
 		if (!editor) return
-		editor.updateInstanceState({ isReadonly: !instagramHandle })
-		if (instagramHandle) {
+		editor.updateInstanceState({ isReadonly: !canCompose })
+		if (displayName) {
 			editor.user.updateUserPreferences({
-				name: `@${instagramHandle}`,
+				name: displayName,
 				colorScheme: 'dark',
 			})
 		}
@@ -164,7 +216,7 @@ export function Room() {
 			inset: 48,
 			animation: { duration: 0 },
 		})
-	}, [editor, instagramHandle])
+	}, [canCompose, displayName, editor])
 
 	const components = isAdmin ? adminComponents : communalComponents
 	const overrides = isAdmin ? adminOverrides : communalOverrides
@@ -172,9 +224,13 @@ export function Room() {
 	return (
 		<RoomShell
 			isAdmin={isAdmin}
-			instagramHandle={instagramHandle}
+			displayName={displayName}
+			canCompose={canCompose}
 			exportStatus={exportStatus}
 			status={status}
+			roomId={roomId}
+			editor={editor}
+			onStatus={setStatus}
 			onExportPng={handleExportPng}
 			onExportPdf={handleExportPdf}
 			onClearBoard={handleClearBoard}
@@ -193,13 +249,13 @@ export function Room() {
 					setEditor(mountedEditor)
 
 					mountedEditor.updateInstanceState({
-						isReadonly: !identityRef.current.instagramHandle,
+						isReadonly: !(identityRef.current.isAdmin || !!identityRef.current.identity),
 					})
 
-					const handle = identityRef.current.instagramHandle
-					if (handle) {
+					const name = identityRef.current.displayName
+					if (name) {
 						mountedEditor.user.updateUserPreferences({
-							name: `@${handle}`,
+							name,
 							colorScheme: 'dark',
 						})
 					}
@@ -222,10 +278,14 @@ export function Room() {
 						'shape',
 						(shape, source) => {
 							if (source !== 'user') return shape
-							const { ownerId: currentOwnerId, instagramHandle: currentHandle, isAdmin: admin } =
-								identityRef.current
-							if (!currentHandle && !admin) {
-								throw new Error('Enter your Instagram handle to draw')
+							const {
+								ownerId: currentOwnerId,
+								identity: currentIdentity,
+								displayName: currentDisplay,
+								isAdmin: admin,
+							} = identityRef.current
+							if (!currentIdentity && !admin) {
+								throw new Error('Enter your name or Instagram handle to draw')
 							}
 
 							// Image / sticker caps (toast, then abort create)
@@ -255,8 +315,8 @@ export function Room() {
 								ownerKey: currentOwnerId,
 								ownerId: currentOwnerId,
 							}
-							if (currentHandle) {
-								meta.displayName = `@${currentHandle}`
+							if (currentDisplay) {
+								meta.displayName = currentDisplay
 							} else if (typeof shape.meta.displayName === 'string') {
 								meta.displayName = shape.meta.displayName
 							}
@@ -334,7 +394,6 @@ export function Room() {
 						const allowed = selected.filter((shape) => {
 							const owner = getShapeOwnerKey(shape)
 							if (!owner) {
-								// Allow selecting own in-progress unmarked? Prefer only owned.
 								if (isScrapbookTile(shape)) return false
 								return false
 							}
@@ -355,7 +414,7 @@ export function Room() {
 					}
 				}}
 			/>
-			{!instagramHandle && <InstagramGate onJoined={setInstagramHandle} />}
+			{!canCompose && <EntryGate onJoined={handleJoined} bannedMessage={bannedMessage} />}
 		</RoomShell>
 	)
 }
@@ -363,9 +422,13 @@ export function Room() {
 function RoomShell({
 	children,
 	isAdmin,
-	instagramHandle,
+	displayName,
+	canCompose,
 	exportStatus,
 	status,
+	roomId,
+	editor,
+	onStatus,
 	onExportPng,
 	onExportPdf,
 	onClearBoard,
@@ -374,9 +437,13 @@ function RoomShell({
 }: {
 	children: ReactNode
 	isAdmin: boolean
-	instagramHandle: string | null
+	displayName: string | null
+	canCompose: boolean
 	exportStatus: string | null
 	status: string | null
+	roomId: string | undefined
+	editor: Editor | null
+	onStatus: (msg: string) => void
 	onExportPng: () => void
 	onExportPdf: () => void
 	onClearBoard: () => void
@@ -385,18 +452,19 @@ function RoomShell({
 }) {
 	return (
 		<div className="RoomWrapper">
-			{instagramHandle && (
+			{canCompose && (
 				<div className="RoomWrapper-checkBar">
-					<span className="RoomWrapper-adminBadge">CHECK B/C</span>
-					<span className="RoomWrapper-handle">@{instagramHandle}</span>
+					<span className="RoomWrapper-adminBadge">CHECK D</span>
+					{displayName && <span className="RoomWrapper-handle">{displayName}</span>}
 					<button className="RoomWrapper-button" onClick={onPlaceBlock}>
 						Place block
 					</button>
 					<button className="RoomWrapper-button" onClick={onSubmitBlock}>
 						Submit
 					</button>
-					{isAdmin && (
+					{isAdmin && roomId && (
 						<>
+							<AdminSubmissionsPanel roomId={roomId} editor={editor} onStatus={onStatus} />
 							<button className="RoomWrapper-button" onClick={onExportPng}>
 								Export PNG
 							</button>

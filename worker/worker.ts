@@ -38,6 +38,12 @@ const router = AutoRouter<IRequest, [env: Env, ctx: ExecutionContext]>({
 	.post('/api/layout/:roomId/clear', (request, env) => forwardToRoom(request, env))
 	.post('/api/layout/:roomId/remove', (request, env) => forwardToRoom(request, env))
 
+	.get('/api/moderation/:roomId', (request, env) => forwardToRoom(request, env))
+	.get('/api/moderation/:roomId/check', (request, env) => forwardToRoom(request, env))
+	.post('/api/moderation/:roomId/register', (request, env) => forwardToRoom(request, env))
+	.post('/api/moderation/:roomId/ban', (request, env) => forwardToRoom(request, env))
+	.post('/api/moderation/:roomId/unban', (request, env) => forwardToRoom(request, env))
+
 	.post('/api/uploads/:uploadId', handleAssetUpload)
 	.get('/api/uploads/:uploadId', handleAssetDownload)
 	.get('/api/unfurl', handleUnfurlRequest)

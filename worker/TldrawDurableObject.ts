@@ -23,6 +23,15 @@ import {
 	saveLayout,
 	submitBlock,
 } from './layout'
+import {
+	banContributor,
+	clearModerationContributors,
+	isBanned,
+	loadModeration,
+	registerContributor,
+	saveModeration,
+	unbanContributor,
+} from './moderation'
 
 const schema = createTLSchema({
 	shapes: { ...defaultShapeSchemas },
@@ -83,6 +92,11 @@ export class TldrawDurableObject extends DurableObject {
 		.post('/api/layout/:roomId/release', (request) => this.handleRelease(request))
 		.post('/api/layout/:roomId/clear', () => this.handleClearLayout())
 		.post('/api/layout/:roomId/remove', (request) => this.handleRemove(request))
+		.get('/api/moderation/:roomId', () => this.handleGetModeration())
+		.get('/api/moderation/:roomId/check', (request) => this.handleCheckBan(request))
+		.post('/api/moderation/:roomId/register', (request) => this.handleRegister(request))
+		.post('/api/moderation/:roomId/ban', (request) => this.handleBan(request))
+		.post('/api/moderation/:roomId/unban', (request) => this.handleUnban(request))
 
 	fetch(request: Request): Response | Promise<Response> {
 		return this.router.fetch(request)
@@ -91,6 +105,14 @@ export class TldrawDurableObject extends DurableObject {
 	async handleConnect(request: IRequest) {
 		const sessionId = request.query.sessionId as string
 		if (!sessionId) return error(400, 'Missing sessionId')
+
+		const ownerKey = (request.query.ownerKey as string | undefined) || undefined
+		if (ownerKey) {
+			const moderation = await loadModeration(this.ctx.storage)
+			if (isBanned(moderation, { ownerKey })) {
+				return error(403, 'You are banned from this scrapbook')
+			}
+		}
 
 		const { 0: clientWebSocket, 1: serverWebSocket } = new WebSocketPair()
 		this.ctx.acceptWebSocket(serverWebSocket)
@@ -118,6 +140,16 @@ export class TldrawDurableObject extends DurableObject {
 			y?: number
 			w?: number
 			h?: number
+		}
+
+		const moderation = await loadModeration(this.ctx.storage)
+		if (
+			isBanned(moderation, {
+				ownerKey: body.ownerKey,
+				displayName: body.displayName,
+			})
+		) {
+			return error(403, 'You are banned from this scrapbook')
 		}
 
 		const state = await loadLayout(this.ctx.storage)
@@ -172,6 +204,8 @@ export class TldrawDurableObject extends DurableObject {
 
 	private async handleClearLayout() {
 		await saveLayout(this.ctx.storage, clearLayout())
+		const moderation = await loadModeration(this.ctx.storage)
+		await saveModeration(this.ctx.storage, clearModerationContributors(moderation))
 		return json({ ok: true })
 	}
 
@@ -180,6 +214,79 @@ export class TldrawDurableObject extends DurableObject {
 		if (!body.shapeId) return error(400, 'Missing shapeId')
 		const state = await loadLayout(this.ctx.storage)
 		await saveLayout(this.ctx.storage, removeBlock(state, body.shapeId))
+		return json({ ok: true })
+	}
+
+	private async handleGetModeration() {
+		const moderation = await loadModeration(this.ctx.storage)
+		const layout = purgeExpired(await loadLayout(this.ctx.storage))
+		await saveLayout(this.ctx.storage, layout)
+		return json({
+			contributors: moderation.contributors,
+			bans: moderation.bans,
+			blocks: layout.blocks,
+		})
+	}
+
+	private async handleCheckBan(request: IRequest) {
+		const ownerKey = (request.query.ownerKey as string | undefined) || ''
+		const handle = (request.query.handle as string | undefined) || null
+		const displayName = (request.query.displayName as string | undefined) || null
+		const moderation = await loadModeration(this.ctx.storage)
+		return json({
+			banned: isBanned(moderation, { ownerKey, handle, displayName }),
+		})
+	}
+
+	private async handleRegister(request: IRequest) {
+		const body = (await request.json()) as {
+			ownerKey?: string
+			name?: string | null
+			handle?: string | null
+			displayName?: string
+		}
+		const moderation = await loadModeration(this.ctx.storage)
+		const result = registerContributor(moderation, {
+			ownerKey: body.ownerKey ?? '',
+			name: body.name,
+			handle: body.handle,
+			displayName: body.displayName ?? '',
+		})
+		if (!result.ok) return error(result.code, result.error)
+		await saveModeration(this.ctx.storage, result.state)
+		return json({ ok: true, contributor: result.contributor })
+	}
+
+	private async handleBan(request: IRequest) {
+		const body = (await request.json()) as {
+			ownerKey?: string
+			handle?: string
+			displayName?: string
+			reason?: string
+			shapeId?: string
+		}
+		const moderation = await loadModeration(this.ctx.storage)
+		const result = banContributor(moderation, {
+			ownerKey: body.ownerKey,
+			handle: body.handle,
+			displayName: body.displayName,
+			reason: body.reason,
+		})
+		if (!result.ok) return error(result.code, result.error)
+		await saveModeration(this.ctx.storage, result.state)
+
+		if (body.shapeId) {
+			const layout = await loadLayout(this.ctx.storage)
+			await saveLayout(this.ctx.storage, removeBlock(layout, body.shapeId))
+		}
+
+		return json({ ok: true })
+	}
+
+	private async handleUnban(request: IRequest) {
+		const body = (await request.json()) as { ownerKey?: string; handle?: string }
+		const moderation = await loadModeration(this.ctx.storage)
+		await saveModeration(this.ctx.storage, unbanContributor(moderation, body))
 		return json({ ok: true })
 	}
 
