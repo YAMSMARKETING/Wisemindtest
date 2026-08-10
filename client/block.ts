@@ -273,6 +273,41 @@ export function countOwnedMedia(
 	return count
 }
 
+/** All page shapes stamped with this ownerKey. */
+export function getOwnedShapes(editor: Editor, ownerKey: string) {
+	return editor.getCurrentPageShapes().filter((shape) => getShapeOwnerKey(shape) === ownerKey)
+}
+
+export function deleteOwnedShapes(editor: Editor, ownerKey: string) {
+	const ids = getOwnedShapes(editor, ownerKey).map((shape) => shape.id)
+	if (ids.length === 0) return 0
+	editor.deleteShapes(ids)
+	return ids.length
+}
+
+/** Union page bounds of everything owned by ownerKey, or null if empty. */
+export function getOwnedShapesBounds(editor: Editor, ownerKey: string) {
+	const shapes = getOwnedShapes(editor, ownerKey)
+	if (shapes.length === 0) return null
+
+	let minX = Infinity
+	let minY = Infinity
+	let maxX = -Infinity
+	let maxY = -Infinity
+
+	for (const shape of shapes) {
+		const bounds = editor.getShapePageBounds(shape)
+		if (!bounds) continue
+		minX = Math.min(minX, bounds.x)
+		minY = Math.min(minY, bounds.y)
+		maxX = Math.max(maxX, bounds.maxX)
+		maxY = Math.max(maxY, bounds.maxY)
+	}
+
+	if (!Number.isFinite(minX) || !Number.isFinite(minY)) return null
+	return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
+}
+
 export function createStickerAsset(editor: Editor, svg: string, name: string): TLAssetId {
 	const assetId = AssetRecordType.createId()
 	const src = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`

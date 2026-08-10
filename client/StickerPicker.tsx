@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { track, useEditor } from 'tldraw'
 import { STICKERS } from './stickers'
 import { setPendingSticker } from './stickerPending'
-import { stampStickerInReservedBlock } from './stampSticker'
+import { stampStickerOnCanvas } from './stampSticker'
 
 export const StickerPicker = track(function StickerPicker() {
 	const editor = useEditor()
@@ -28,7 +28,7 @@ export const StickerPicker = track(function StickerPicker() {
 							title={sticker.label}
 							onClick={() => {
 								setPendingSticker(sticker.id)
-								stampStickerInReservedBlock(editor, sticker)
+								stampStickerOnCanvas(editor, sticker)
 								setOpen(false)
 							}}
 						>

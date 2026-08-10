@@ -1,26 +1,16 @@
 import { TLImageShape, createShapeId, Editor } from 'tldraw'
-import { createStickerAsset, findOwnedReservedBlock } from './block'
-import { BLOCK_PADDING } from './pageGeometry'
+import { countOwnedMedia, createStickerAsset } from './block'
 import { getScrapbookOwnerKey } from './scrapbookSession'
-import { countOwnedMedia } from './block'
 import { MAX_STICKERS_PER_SUBMISSION, type StickerDef } from './stickers'
 import { showToast } from './toastBridge'
 
-/** Stamp a sticker into the current user's reserved block (center). */
-export function stampStickerInReservedBlock(editor: Editor, sticker: StickerDef) {
+const STICKER_SIZE = 72
+
+/** Stamp a sticker onto the open canvas at the current pointer (or viewport center). */
+export function stampStickerOnCanvas(editor: Editor, sticker: StickerDef) {
 	const owner = getScrapbookOwnerKey()
 	if (!owner) {
 		showToast({ title: 'Join first to add stickers', severity: 'warning' })
-		return false
-	}
-
-	const blockId = findOwnedReservedBlock(editor, owner)
-	if (!blockId) {
-		showToast({
-			title: 'Place your block first',
-			description: 'Stickers go inside your reserved memory block.',
-			severity: 'warning',
-		})
 		return false
 	}
 
@@ -29,14 +19,9 @@ export function stampStickerInReservedBlock(editor: Editor, sticker: StickerDef)
 		return false
 	}
 
-	const frame = editor.getShape(blockId)
-	if (!frame || frame.type !== 'frame') return false
-
-	const size = 72
-	const w = (frame.props as { w: number }).w
-	const h = (frame.props as { h: number }).h
-	const x = Math.max(BLOCK_PADDING, (w - size) / 2)
-	const y = Math.max(BLOCK_PADDING, Math.min(h - size - BLOCK_PADDING, h * 0.45))
+	const point = editor.inputs.currentPagePoint
+	const x = point.x - STICKER_SIZE / 2
+	const y = point.y - STICKER_SIZE / 2
 
 	const assetId = createStickerAsset(editor, sticker.svg, sticker.label)
 	const shapeId = createShapeId()
@@ -44,13 +29,12 @@ export function stampStickerInReservedBlock(editor: Editor, sticker: StickerDef)
 	editor.createShape({
 		id: shapeId,
 		type: 'image',
-		parentId: blockId,
 		x,
 		y,
 		props: {
 			assetId,
-			w: size,
-			h: size,
+			w: STICKER_SIZE,
+			h: STICKER_SIZE,
 			playing: false,
 			url: '',
 			crop: null,
@@ -70,3 +54,6 @@ export function stampStickerInReservedBlock(editor: Editor, sticker: StickerDef)
 	showToast({ title: `Added ${sticker.label}`, severity: 'success' })
 	return true
 }
+
+/** @deprecated Use stampStickerOnCanvas */
+export const stampStickerInReservedBlock = stampStickerOnCanvas

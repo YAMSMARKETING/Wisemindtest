@@ -1,10 +1,10 @@
 import { StateNode } from 'tldraw'
 import { getPendingSticker } from './stickerPending'
-import { stampStickerInReservedBlock } from './stampSticker'
+import { stampStickerOnCanvas } from './stampSticker'
 import { showToast } from './toastBridge'
 
 /**
- * Sticker tool: click stamps the pending sticker into the reserved block.
+ * Sticker tool: click stamps the pending sticker onto the open canvas.
  * Picker can also stamp immediately without using this tool.
  */
 export class StickerTool extends StateNode {
@@ -14,7 +14,7 @@ export class StickerTool extends StateNode {
 		this.editor.setCursor({ type: 'cross', rotation: 0 })
 		const sticker = getPendingSticker()
 		if (sticker) {
-			stampStickerInReservedBlock(this.editor, sticker)
+			stampStickerOnCanvas(this.editor, sticker)
 			this.editor.setCurrentTool('select')
 		}
 	}
@@ -25,7 +25,7 @@ export class StickerTool extends StateNode {
 			showToast({ title: 'Pick a sticker from the Stickers panel', severity: 'info' })
 			return
 		}
-		stampStickerInReservedBlock(this.editor, sticker)
+		stampStickerOnCanvas(this.editor, sticker)
 		this.editor.setCurrentTool('select')
 	}
 }

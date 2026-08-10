@@ -4,14 +4,7 @@ import { useParams } from 'react-router-dom'
 import { Editor, Tldraw, react } from 'tldraw'
 import { AdminSubmissionsPanel } from '../AdminSubmissionsPanel'
 import { isAdminFromSearch } from '../admin'
-import {
-	countOwnedMedia,
-	findOwnedReservedBlock,
-	getShapeOwnerKey,
-	isScrapbookTile,
-	placeBlockOnServer,
-	submitBlockOnServer,
-} from '../block'
+import { countOwnedMedia, getShapeOwnerKey } from '../block'
 import { TLDRAW_LICENSE_KEY } from '../constants'
 import { EntryGate } from '../EntryGate'
 import { clearBoard, exportBoardAsPdf, exportBoardAsPng } from '../exportBoard'
@@ -23,11 +16,7 @@ import { multiplayerAssetStore } from '../multiplayerAssetStore'
 import { getOrCreateOwnerId } from '../ownerId'
 import { PAGE_BOUNDS } from '../pageGeometry'
 import { setScrapbookOwnerKey } from '../scrapbookSession'
-import {
-	canUserMutateShape,
-	isInsideSubmittedBlock,
-	isMovementChange,
-} from '../shapeGuards'
+import { canUserMutateShape, isMovementChange } from '../shapeGuards'
 import { StickerTool } from '../StickerTool'
 import { MAX_IMAGES_PER_SUBMISSION, MAX_STICKERS_PER_SUBMISSION } from '../stickers'
 import { showToast } from '../toastBridge'
@@ -149,51 +138,6 @@ export function Room() {
 		}
 	}, [editor, roomId])
 
-	const handlePlaceBlock = useCallback(async () => {
-		if (!editor || !displayName || !roomId) return
-		try {
-			const result = await placeBlockOnServer(editor, {
-				roomId,
-				ownerKey: ownerId,
-				displayName,
-			})
-			if (result.alreadyHad) {
-				setStatus('You already have a reserved block')
-				return
-			}
-			setStatus(
-				result.nudged
-					? 'Placed (nudged to clear spot) — compose, then Submit'
-					: 'Block reserved — compose inside, then Submit'
-			)
-		} catch (error) {
-			console.error(error)
-			setStatus(error instanceof Error ? error.message : 'Could not place block')
-		}
-	}, [displayName, editor, ownerId, roomId])
-
-	const handleSubmitBlock = useCallback(async () => {
-		if (!editor || !displayName || !roomId) return
-		try {
-			const blockId = findOwnedReservedBlock(editor, ownerId)
-			if (!blockId) {
-				setStatus('No reserved block — place one first')
-				return
-			}
-			const size = await submitBlockOnServer(editor, {
-				roomId,
-				ownerKey: ownerId,
-				blockId,
-			})
-			setStatus(
-				`Submitted — ${Math.round(size.before.width)}×${Math.round(size.before.height)} → ${Math.round(size.width)}×${Math.round(size.height)}`
-			)
-		} catch (error) {
-			console.error(error)
-			setStatus(error instanceof Error ? error.message : 'Submit failed')
-		}
-	}, [displayName, editor, ownerId, roomId])
-
 	useEffect(() => {
 		if (!exportStatus && !status) return
 		const timeout = setTimeout(() => {
@@ -234,8 +178,6 @@ export function Room() {
 			onExportPng={handleExportPng}
 			onExportPdf={handleExportPdf}
 			onClearBoard={handleClearBoard}
-			onPlaceBlock={handlePlaceBlock}
-			onSubmitBlock={handleSubmitBlock}
 		>
 			<Tldraw
 				store={store}
@@ -350,14 +292,10 @@ export function Room() {
 							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
 							if (admin) return next
 
-							if (
-								!canUserMutateShape(prev, { ownerKey: currentOwnerId, isAdmin: admin }) ||
-								isInsideSubmittedBlock(prev, (id) => mountedEditor.getShape(id as never))
-							) {
+							if (!canUserMutateShape(prev, { ownerKey: currentOwnerId, isAdmin: admin })) {
 								return prev
 							}
 
-							// Also block mutating others' shapes when ownerKey missing on legacy
 							if (prev.meta.ownerId && prev.meta.ownerId !== currentOwnerId) {
 								return prev
 							}
@@ -375,10 +313,7 @@ export function Room() {
 							if (source !== 'user') return
 							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
 							if (admin) return
-							if (
-								!canUserMutateShape(shape, { ownerKey: currentOwnerId, isAdmin: admin }) ||
-								isInsideSubmittedBlock(shape, (id) => mountedEditor.getShape(id as never))
-							) {
+							if (!canUserMutateShape(shape, { ownerKey: currentOwnerId, isAdmin: admin })) {
 								return false
 							}
 							if (getShapeOwnerKey(shape) === currentOwnerId) return
@@ -393,10 +328,6 @@ export function Room() {
 						const selected = mountedEditor.getSelectedShapes()
 						const allowed = selected.filter((shape) => {
 							const owner = getShapeOwnerKey(shape)
-							if (!owner) {
-								if (isScrapbookTile(shape)) return false
-								return false
-							}
 							return owner === currentOwnerId
 						})
 						if (allowed.length !== selected.length) {
@@ -432,8 +363,6 @@ function RoomShell({
 	onExportPng,
 	onExportPdf,
 	onClearBoard,
-	onPlaceBlock,
-	onSubmitBlock,
 }: {
 	children: ReactNode
 	isAdmin: boolean
@@ -447,8 +376,6 @@ function RoomShell({
 	onExportPng: () => void
 	onExportPdf: () => void
 	onClearBoard: () => void
-	onPlaceBlock: () => void
-	onSubmitBlock: () => void
 }) {
 	return (
 		<div className="RoomWrapper">
@@ -456,12 +383,6 @@ function RoomShell({
 				<div className="RoomWrapper-checkBar">
 					<span className="RoomWrapper-adminBadge">CHECK D</span>
 					{displayName && <span className="RoomWrapper-handle">{displayName}</span>}
-					<button className="RoomWrapper-button" onClick={onPlaceBlock}>
-						Place block
-					</button>
-					<button className="RoomWrapper-button" onClick={onSubmitBlock}>
-						Submit
-					</button>
 					{isAdmin && roomId && (
 						<>
 							<AdminSubmissionsPanel roomId={roomId} editor={editor} onStatus={onStatus} />

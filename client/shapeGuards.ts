@@ -1,5 +1,5 @@
 import { TLShape } from 'tldraw'
-import { getShapeOwnerKey, isScrapbookTile } from './block'
+import { getShapeOwnerKey } from './block'
 
 /** True when a shape update changes position/size. */
 export function isMovementChange(prev: TLShape, next: TLShape) {
@@ -13,6 +13,7 @@ export function isMovementChange(prev: TLShape, next: TLShape) {
 	return false
 }
 
+/** Owner may edit their own shapes; admin may edit anything. */
 export function canUserMutateShape(
 	shape: TLShape,
 	opts: { ownerKey: string; isAdmin: boolean }
@@ -20,22 +21,5 @@ export function canUserMutateShape(
 	if (opts.isAdmin) return true
 	const owner = getShapeOwnerKey(shape)
 	if (!owner) return false
-	if (owner !== opts.ownerKey) return false
-	// Submitted scrapbook blocks (and anything inside them) are locked for the owner.
-	if (isScrapbookTile(shape) && shape.meta.status === 'submitted') return false
-	return true
-}
-
-export function isInsideSubmittedBlock(
-	shape: TLShape,
-	getParent: (id: string) => TLShape | undefined
-) {
-	let current: TLShape | undefined = shape
-	while (current?.parentId) {
-		const parent = getParent(current.parentId)
-		if (!parent) break
-		if (isScrapbookTile(parent) && parent.meta.status === 'submitted') return true
-		current = parent
-	}
-	return false
+	return owner === opts.ownerKey
 }
