@@ -370,7 +370,7 @@ function RoomShell({
 	return (
 		<div className="RoomWrapper">
 			{canCompose && (
-				<div className={`RoomWrapper-checkBar${isAdmin ? ' RoomWrapper-checkBar--admin' : ''}`}>
+				<div className={`RoomWrapper-checkBar${isAdmin ? ' RoomWrapper-checkBar--admin' : ' RoomWrapper-checkBar--user'}`}>
 					{isAdmin ? (
 						<>
 							<span className="RoomWrapper-adminBadge">Admin</span>
@@ -389,7 +389,11 @@ function RoomShell({
 							</button>
 						</>
 					) : (
-						displayName && <span className="RoomWrapper-handle">{displayName}</span>
+						displayName && (
+							<span className="RoomWrapper-userName" title="Your display name">
+								{displayName}
+							</span>
+						)
 					)}
 					{(status || exportStatus) && (
 						<span className="RoomWrapper-status">{status || exportStatus}</span>
