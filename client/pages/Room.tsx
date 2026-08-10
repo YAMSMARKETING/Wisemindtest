@@ -16,8 +16,7 @@ import { multiplayerAssetStore } from '../multiplayerAssetStore'
 import { getOrCreateOwnerId } from '../ownerId'
 import { setScrapbookOwnerKey } from '../scrapbookSession'
 import { canUserMutateShape, isMovementChange } from '../shapeGuards'
-import { StickerTool } from '../StickerTool'
-import { MAX_IMAGES_PER_SUBMISSION, MAX_STICKERS_PER_SUBMISSION } from '../stickers'
+import { MAX_IMAGES_PER_SUBMISSION } from '../stickers'
 import { showToast } from '../toastBridge'
 import {
 	adminComponents,
@@ -180,7 +179,6 @@ export function Room() {
 				colorScheme="dark"
 				components={components}
 				overrides={overrides}
-				tools={[StickerTool]}
 				options={{ maxPages: 1 }}
 				onMount={(mountedEditor) => {
 					setEditor(mountedEditor)
@@ -220,24 +218,14 @@ export function Room() {
 								throw new Error('Enter your name or Instagram handle to draw')
 							}
 
-							// Image / sticker caps (toast, then abort create)
-							if (shape.type === 'image') {
-								const isSticker = shape.meta.kind === 'sticker'
-								if (isSticker) {
-									if (
-										countOwnedMedia(mountedEditor, currentOwnerId, 'sticker') >=
-										MAX_STICKERS_PER_SUBMISSION
-									) {
-										showToast({ title: '2 sticker limit reached', severity: 'warning' })
-										throw new Error('STICKER_LIMIT')
-									}
-								} else if (
-									countOwnedMedia(mountedEditor, currentOwnerId, 'image') >=
+							// Image caps (toast, then abort create)
+							if (
+								shape.type === 'image' &&
+								countOwnedMedia(mountedEditor, currentOwnerId, 'image') >=
 									MAX_IMAGES_PER_SUBMISSION
-								) {
-									showToast({ title: '3 image limit reached', severity: 'warning' })
-									throw new Error('IMAGE_LIMIT')
-								}
+							) {
+								showToast({ title: '3 image limit reached', severity: 'warning' })
+								throw new Error('IMAGE_LIMIT')
 							}
 
 							if (getShapeOwnerKey(shape)) return shape
@@ -253,7 +241,7 @@ export function Room() {
 								meta.displayName = shape.meta.displayName
 							}
 							if (shape.type === 'image') {
-								meta.kind = shape.meta.kind === 'sticker' ? 'sticker' : 'image'
+								meta.kind = 'image'
 							} else if (typeof shape.meta.kind === 'string') {
 								meta.kind = shape.meta.kind
 							}

@@ -8,34 +8,20 @@ import {
 	TextToolbarItem,
 	TLComponents,
 	TLUiOverrides,
-	TldrawUiMenuItem,
-	useIsToolSelected,
-	useTools,
 } from 'tldraw'
-import { StickerPicker } from './StickerPicker'
 import { ToastBridge } from './ToastBridge'
 
-function StickerToolbarItem() {
-	const tools = useTools()
-	const isSelected = useIsToolSelected(tools['sticker'])
-	return <TldrawUiMenuItem {...tools['sticker']} isSelected={isSelected} />
-}
-
-/** Contributor toolbar: select, hand, draw, eraser, text, image, sticker. */
+/** Contributor toolbar: select, hand, draw, eraser, text, image. */
 export function CommunalToolbar() {
 	return (
-		<>
-			<DefaultToolbar>
-				<SelectToolbarItem />
-				<HandToolbarItem />
-				<DrawToolbarItem />
-				<EraserToolbarItem />
-				<TextToolbarItem />
-				<AssetToolbarItem />
-				<StickerToolbarItem />
-			</DefaultToolbar>
-			<StickerPicker />
-		</>
+		<DefaultToolbar>
+			<SelectToolbarItem />
+			<HandToolbarItem />
+			<DrawToolbarItem />
+			<EraserToolbarItem />
+			<TextToolbarItem />
+			<AssetToolbarItem />
+		</DefaultToolbar>
 	)
 }
 
@@ -54,26 +40,8 @@ export const communalComponents: TLComponents = {
 }
 
 export const communalOverrides: TLUiOverrides = {
-	tools(editor, tools) {
-		tools.sticker = {
-			id: 'sticker',
-			label: 'Stickers',
-			icon: 'heart',
-			kbd: 's',
-			onSelect: () => {
-				editor.setCurrentTool('sticker')
-			},
-		}
-
-		const allowed = new Set([
-			'select',
-			'hand',
-			'draw',
-			'eraser',
-			'text',
-			'asset',
-			'sticker',
-		])
+	tools(_editor, tools) {
+		const allowed = new Set(['select', 'hand', 'draw', 'eraser', 'text', 'asset'])
 		for (const id of Object.keys(tools)) {
 			if (!allowed.has(id)) delete tools[id]
 		}
