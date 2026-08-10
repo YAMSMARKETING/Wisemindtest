@@ -1,0 +1,18 @@
+/** Re-export shared geometry for the client bundle. */
+export {
+	A_RATIO,
+	BLOCK_PADDING,
+	MAX_BLOCK_HEIGHT,
+	MAX_BLOCK_WIDTH,
+	MIN_BLOCK_GAP,
+	MIN_BLOCK_HEIGHT,
+	MIN_BLOCK_WIDTH,
+	PAGE_BOUNDS,
+	PAGE_HEIGHT,
+	PAGE_ORIGIN,
+	PAGE_WIDTH,
+	RESERVATION_TTL_MS,
+	STARTER_BLOCK_HEIGHT,
+	STARTER_BLOCK_WIDTH,
+	type Rect,
+} from '../shared/pageGeometry'

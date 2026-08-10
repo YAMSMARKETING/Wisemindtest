@@ -1,28 +1,103 @@
 import { useSync } from '@tldraw/sync'
-import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Editor, Tldraw } from 'tldraw'
+import { Editor, Tldraw, react } from 'tldraw'
+import { AdminSubmissionsPanel } from '../AdminSubmissionsPanel'
 import { isAdminFromSearch } from '../admin'
+import { countOwnedMedia, getShapeOwnerKey } from '../block'
 import { TLDRAW_LICENSE_KEY } from '../constants'
+import { EntryGate } from '../EntryGate'
 import { clearBoard, exportBoardAsPdf, exportBoardAsPng } from '../exportBoard'
 import { getBookmarkPreview } from '../getBookmarkPreview'
+import { clearStoredIdentity, getStoredIdentity, type StoredIdentity } from '../identity'
+import { apiClearLayout } from '../layoutApi'
+import { apiCheckBan, apiRegisterContributor } from '../moderationApi'
 import { multiplayerAssetStore } from '../multiplayerAssetStore'
 import { getOrCreateOwnerId } from '../ownerId'
+import { setScrapbookOwnerKey } from '../scrapbookSession'
+import { canUserMutateShape, isMovementChange } from '../shapeGuards'
+import { MAX_IMAGES_PER_SUBMISSION } from '../stickers'
+import { showToast } from '../toastBridge'
+import {
+	adminComponents,
+	adminOverrides,
+	communalComponents,
+	communalOverrides,
+} from '../uiConfig'
 
 export function Room() {
 	const { roomId } = useParams<{ roomId: string }>()
 	const ownerId = useMemo(() => getOrCreateOwnerId(), [])
 	const isAdmin = useMemo(() => isAdminFromSearch(), [])
+	const [identity, setIdentity] = useState<StoredIdentity | null>(() => getStoredIdentity())
+	const [bannedMessage, setBannedMessage] = useState<string | null>(null)
 	const [editor, setEditor] = useState<Editor | null>(null)
 	const [exportStatus, setExportStatus] = useState<string | null>(null)
+	const [status, setStatus] = useState<string | null>(null)
 
-	// Create a store connected to multiplayer.
+	const displayName = identity?.displayName ?? (isAdmin ? 'admin' : null)
+	const canCompose = isAdmin || !!identity
+
+	const identityRef = useRef({ ownerId, isAdmin, identity, displayName })
+	identityRef.current = { ownerId, isAdmin, identity, displayName }
+
+	useEffect(() => {
+		setScrapbookOwnerKey(ownerId)
+		return () => setScrapbookOwnerKey(null)
+	}, [ownerId])
+
+	// Ban check + contributor register once identity is known
+	useEffect(() => {
+		if (!roomId || !identity || isAdmin) return
+		let cancelled = false
+
+		;(async () => {
+			try {
+				const { banned } = await apiCheckBan(roomId, {
+					ownerKey: ownerId,
+					handle: identity.handle,
+					displayName: identity.displayName,
+				})
+				if (cancelled) return
+				if (banned) {
+					setBannedMessage('You are banned from this scrapbook')
+					clearStoredIdentity()
+					setIdentity(null)
+					return
+				}
+				await apiRegisterContributor(roomId, {
+					ownerKey: ownerId,
+					name: identity.name,
+					handle: identity.handle,
+					displayName: identity.displayName,
+				})
+			} catch (error) {
+				if (cancelled) return
+				const message = error instanceof Error ? error.message : 'Could not join'
+				if (/banned/i.test(message)) {
+					setBannedMessage(message)
+					clearStoredIdentity()
+					setIdentity(null)
+				} else {
+					setStatus(message)
+				}
+			}
+		})()
+
+		return () => {
+			cancelled = true
+		}
+	}, [identity, isAdmin, ownerId, roomId])
+
 	const store = useSync({
-		// We need to know the websockets URI...
-		uri: `${window.location.origin}/api/connect/${roomId}`,
-		// ...and how to handle static assets like images & videos
+		uri: `${window.location.origin}/api/connect/${roomId}?ownerKey=${encodeURIComponent(ownerId)}`,
 		assets: multiplayerAssetStore,
 	})
+
+	const handleJoined = useCallback((next: StoredIdentity) => {
+		setBannedMessage(null)
+		setIdentity(next)
+	}, [])
 
 	const handleExportPng = useCallback(async () => {
 		if (!editor) return
@@ -48,169 +123,272 @@ export function Room() {
 		}
 	}, [editor])
 
-	const handleClearBoard = useCallback(() => {
-		if (!editor) return
+	const handleClearBoard = useCallback(async () => {
+		if (!editor || !roomId) return
 		if (!window.confirm('Clear the entire board for everyone?')) return
-		clearBoard(editor)
-		setExportStatus('Board cleared')
-	}, [editor])
+		try {
+			await apiClearLayout(roomId)
+			clearBoard(editor)
+			setExportStatus('Board cleared')
+		} catch (error) {
+			console.error(error)
+			setExportStatus(error instanceof Error ? error.message : 'Clear failed')
+		}
+	}, [editor, roomId])
 
 	useEffect(() => {
-		if (!exportStatus) return
-		const timeout = setTimeout(() => setExportStatus(null), 3000)
+		if (!exportStatus && !status) return
+		const timeout = setTimeout(() => {
+			setExportStatus(null)
+			setStatus(null)
+		}, 4500)
 		return () => clearTimeout(timeout)
-	}, [exportStatus])
+	}, [exportStatus, status])
+
+	useEffect(() => {
+		if (!editor) return
+		editor.updateInstanceState({ isReadonly: !canCompose })
+		if (displayName) {
+			editor.user.updateUserPreferences({
+				name: displayName,
+				colorScheme: 'dark',
+			})
+		}
+	}, [canCompose, displayName, editor])
+
+	const components = isAdmin ? adminComponents : communalComponents
+	const overrides = isAdmin ? adminOverrides : communalOverrides
 
 	return (
-		<RoomWrapper
-			roomId={roomId}
+		<RoomShell
 			isAdmin={isAdmin}
+			displayName={displayName}
+			canCompose={canCompose}
 			exportStatus={exportStatus}
+			status={status}
+			roomId={roomId}
+			editor={editor}
+			onStatus={setStatus}
 			onExportPng={handleExportPng}
 			onExportPdf={handleExportPdf}
 			onClearBoard={handleClearBoard}
 		>
 			<Tldraw
-				// we can pass the connected store into the Tldraw component which will handle
-				// loading states & enable multiplayer UX like cursors & a presence menu
 				store={store}
 				licenseKey={TLDRAW_LICENSE_KEY}
-				options={{ deepLinks: true }}
+				colorScheme="dark"
+				components={components}
+				overrides={overrides}
+				options={{ maxPages: 1 }}
 				onMount={(mountedEditor) => {
 					setEditor(mountedEditor)
 
-					// when the editor is ready, we need to register our bookmark unfurling service
+					mountedEditor.updateInstanceState({
+						isReadonly: !(identityRef.current.isAdmin || !!identityRef.current.identity),
+					})
+
+					const name = identityRef.current.displayName
+					if (name) {
+						mountedEditor.user.updateUserPreferences({
+							name,
+							colorScheme: 'dark',
+						})
+					}
+
 					mountedEditor.registerExternalAssetHandler('url', getBookmarkPreview)
 
-					// Stamp anonymous ownership on every locally created shape.
+					const pages = mountedEditor.getPages()
+					if (pages.length > 1) {
+						for (const page of pages.slice(1)) {
+							mountedEditor.deletePage(page.id)
+						}
+					}
+
 					const disposeBeforeCreate = mountedEditor.sideEffects.registerBeforeCreateHandler(
 						'shape',
 						(shape, source) => {
-							// Only enforce local creation rules; remote sync must pass through.
 							if (source !== 'user') return shape
-
-							// One image at a time for the whole board (slot frees when deleted).
-							if (shape.type === 'image') {
-								const imageAlreadyExists = mountedEditor
-									.getCurrentPageShapes()
-									.some((existing) => existing.type === 'image')
-								if (imageAlreadyExists) {
-									// Throwing aborts the store transaction so the shape is never created.
-									throw new Error('Only one image is allowed on the board at a time')
-								}
+							const {
+								ownerId: currentOwnerId,
+								identity: currentIdentity,
+								displayName: currentDisplay,
+								isAdmin: admin,
+							} = identityRef.current
+							if (!currentIdentity && !admin) {
+								throw new Error('Enter your name or Instagram handle to draw')
 							}
 
-							if (shape.meta.ownerId) return shape
+							// Image caps (toast, then abort create)
+							if (
+								shape.type === 'image' &&
+								countOwnedMedia(mountedEditor, currentOwnerId, 'image') >=
+									MAX_IMAGES_PER_SUBMISSION
+							) {
+								showToast({ title: '3 image limit reached', severity: 'warning' })
+								throw new Error('IMAGE_LIMIT')
+							}
+
+							if (getShapeOwnerKey(shape)) return shape
+
+							// meta must be JSON-serializable — never write `undefined` values
+							const meta: Record<string, string> = {
+								ownerKey: currentOwnerId,
+								ownerId: currentOwnerId,
+							}
+							if (currentDisplay) {
+								meta.displayName = currentDisplay
+							} else if (typeof shape.meta.displayName === 'string') {
+								meta.displayName = shape.meta.displayName
+							}
+							if (shape.type === 'image') {
+								meta.kind = 'image'
+							} else if (typeof shape.meta.kind === 'string') {
+								meta.kind = shape.meta.kind
+							}
 
 							return {
 								...shape,
-								meta: {
-									...shape.meta,
-									ownerId,
-								},
+								meta,
 							}
 						}
 					)
 
-					// Ownership-gated deletion (admin can delete anything).
+					const disposePageCreate = mountedEditor.sideEffects.registerBeforeCreateHandler(
+						'page',
+						(page, source) => {
+							if (source === 'user') {
+								throw new Error('Only one page is allowed')
+							}
+							return page
+						}
+					)
+
+					const disposeBeforeChange = mountedEditor.sideEffects.registerBeforeChangeHandler(
+						'shape',
+						(prev, next, source) => {
+							if (source !== 'user') return next
+							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
+							if (admin) return next
+
+							if (!canUserMutateShape(prev, { ownerKey: currentOwnerId, isAdmin: admin })) {
+								return prev
+							}
+
+							if (prev.meta.ownerId && prev.meta.ownerId !== currentOwnerId) {
+								return prev
+							}
+							if (!getShapeOwnerKey(prev) && isMovementChange(prev, next)) {
+								return prev
+							}
+
+							return next
+						}
+					)
+
 					const disposeBeforeDelete = mountedEditor.sideEffects.registerBeforeDeleteHandler(
 						'shape',
 						(shape, source) => {
 							if (source !== 'user') return
-							if (isAdmin) return
-							if (shape.meta.ownerId === ownerId) return
+							const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
+							if (admin) return
+							if (!canUserMutateShape(shape, { ownerKey: currentOwnerId, isAdmin: admin })) {
+								return false
+							}
+							if (getShapeOwnerKey(shape) === currentOwnerId) return
 							return false
 						}
 					)
 
+					// Selection lock: drop anything the user doesn't own (admin bypass).
+					const unsubSelection = react('scrapbook-selection-lock', () => {
+						const { ownerId: currentOwnerId, isAdmin: admin } = identityRef.current
+						if (admin) return
+						const selected = mountedEditor.getSelectedShapes()
+						const allowed = selected.filter((shape) => {
+							const owner = getShapeOwnerKey(shape)
+							return owner === currentOwnerId
+						})
+						if (allowed.length !== selected.length) {
+							mountedEditor.setSelectedShapes(allowed.map((s) => s.id))
+						}
+					})
+
 					return () => {
 						disposeBeforeCreate()
+						disposePageCreate()
+						disposeBeforeChange()
 						disposeBeforeDelete()
+						unsubSelection()
 						setEditor((current) => (current === mountedEditor ? null : current))
 					}
 				}}
 			/>
-		</RoomWrapper>
+			{!canCompose && <EntryGate onJoined={handleJoined} bannedMessage={bannedMessage} />}
+		</RoomShell>
 	)
 }
 
-function RoomWrapper({
+function RoomShell({
 	children,
-	roomId,
 	isAdmin,
+	displayName,
+	canCompose,
 	exportStatus,
+	status,
+	roomId,
+	editor,
+	onStatus,
 	onExportPng,
 	onExportPdf,
 	onClearBoard,
 }: {
 	children: ReactNode
-	roomId?: string
 	isAdmin: boolean
+	displayName: string | null
+	canCompose: boolean
 	exportStatus: string | null
+	status: string | null
+	roomId: string | undefined
+	editor: Editor | null
+	onStatus: (msg: string) => void
 	onExportPng: () => void
 	onExportPdf: () => void
 	onClearBoard: () => void
 }) {
-	const [didCopy, setDidCopy] = useState(false)
-
-	useEffect(() => {
-		if (!didCopy) return
-		const timeout = setTimeout(() => setDidCopy(false), 3000)
-		return () => clearTimeout(timeout)
-	}, [didCopy])
-
 	return (
 		<div className="RoomWrapper">
-			<div className="RoomWrapper-header">
-				<WifiIcon />
-				<div>{roomId}</div>
-				{isAdmin && <span className="RoomWrapper-adminBadge">Admin</span>}
-				<button
-					className="RoomWrapper-copy"
-					onClick={() => {
-						navigator.clipboard.writeText(window.location.href)
-						setDidCopy(true)
-					}}
-					aria-label="copy room link"
-				>
-					Copy link
-					{didCopy && <div className="RoomWrapper-copied">Copied!</div>}
-				</button>
-				{isAdmin && (
-					<div className="RoomWrapper-adminActions">
-						<button className="RoomWrapper-copy" onClick={onExportPng}>
-							Export PNG
-						</button>
-						<button className="RoomWrapper-copy" onClick={onExportPdf}>
-							Export PDF
-						</button>
-						<button className="RoomWrapper-copy" onClick={onClearBoard}>
-							Clear board
-						</button>
-					</div>
-				)}
-				{exportStatus && <div className="RoomWrapper-status">{exportStatus}</div>}
-			</div>
+			{canCompose && (
+				<div className={`RoomWrapper-checkBar${isAdmin ? ' RoomWrapper-checkBar--admin' : ' RoomWrapper-checkBar--user'}`}>
+					{isAdmin ? (
+						<>
+							<span className="RoomWrapper-adminBadge">Admin</span>
+							{displayName && <span className="RoomWrapper-handle">{displayName}</span>}
+							{roomId && (
+								<AdminSubmissionsPanel roomId={roomId} editor={editor} onStatus={onStatus} />
+							)}
+							<button className="RoomWrapper-button" onClick={onExportPng}>
+								Export PNG
+							</button>
+							<button className="RoomWrapper-button" onClick={onExportPdf}>
+								Export PDF
+							</button>
+							<button className="RoomWrapper-button" onClick={onClearBoard}>
+								Clear board
+							</button>
+						</>
+					) : (
+						displayName && (
+							<span className="RoomWrapper-userName" title="Your display name">
+								{displayName}
+							</span>
+						)
+					)}
+					{(status || exportStatus) && (
+						<span className="RoomWrapper-status">{status || exportStatus}</span>
+					)}
+				</div>
+			)}
 			<div className="RoomWrapper-content">{children}</div>
 		</div>
-	)
-}
-
-function WifiIcon() {
-	return (
-		<svg
-			xmlns="http://www.w3.org/2000/svg"
-			fill="none"
-			viewBox="0 0 24 24"
-			strokeWidth="1.5"
-			stroke="currentColor"
-			width={16}
-		>
-			<path
-				strokeLinecap="round"
-				strokeLinejoin="round"
-				d="M8.288 15.038a5.25 5.25 0 0 1 7.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 0 1 1.06 0Z"
-			/>
-		</svg>
 	)
 }

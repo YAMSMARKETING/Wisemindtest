@@ -1,108 +1,370 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;700&family=Syne:wght@700;800&display=swap');
 @import url('tldraw/tldraw.css');
 
-body {
-	font-family: 'Inter', sans-serif;
-	overscroll-behavior: none;
-}
-
-.RoomWrapper {
-	--background: white;
-	--text: hsl(0, 0%, 20%);
-	--gray-light: #f5f5f5;
-	--gray-dark: #e5e5e5;
-	--black-transparent-lighter: rgba(0, 0, 0, 0.15);
-	--black-transparent-light: rgba(0, 0, 0, 0.4);
-	--black-transparent-dark: rgba(0, 0, 0, 0.6);
-	--black-transparent-darker: rgba(0, 0, 0, 0.7);
-	--focus: hsl(217, 89%, 61%);
-	--whiteboard: hsl(240, 5%, 96%);
-	color-scheme: light;
-}
-
-:root:has(.tl-theme__dark) .RoomWrapper {
-	--background: black;
-	--text: hsl(0, 9%, 94%);
-	--gray-light: #333;
-	--gray-dark: #444;
-	--black-transparent-lighter: rgba(255, 255, 255, 0.15);
-	--black-transparent-light: rgba(255, 255, 255, 0.4);
-	--black-transparent-dark: rgba(255, 255, 255, 0.6);
-	--black-transparent-darker: rgba(255, 255, 255, 0.7);
-	--focus: hsl(217, 89%, 61%);
-	--whiteboard: hsl(240, 5%, 6.5%);
+:root {
+	--bg: #050505;
+	--panel: #111111;
+	--text: #f4f4f4;
+	--muted: #a0a0a0;
+	--line: #2a2a2a;
+	--accent: #f2f2f2;
+	--danger: #ff6b6b;
 	color-scheme: dark;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html {
+	height: 100%;
+	overflow: hidden;
+}
+
+body {
+	margin: 0;
+	height: 100%;
+	overflow: hidden;
+	font-family: 'Instrument Sans', sans-serif;
+	background: var(--bg);
+	color: var(--text);
+	overscroll-behavior: none;
+	/* Fallback until iosViewport.ts measures */
+	--browser-chrome-bottom: 0px;
+	--app-height: 100svh;
+	--app-top: 0px;
+}
+
+/*
+ * Pin the app to the visual viewport. On iOS Safari, 100vh / absolute fill
+ * of the layout viewport extends under the bottom browser chrome.
+ */
+#root {
+	position: fixed;
+	top: var(--app-top, 0px);
+	left: 0;
+	width: 100%;
+	height: var(--app-height, 100svh);
+	overflow: hidden;
+}
+
+/* Force a true black canvas regardless of theme tokens */
+.tl-background,
+.tl-theme__dark .tl-background {
+	background-color: #000 !important;
 }
 
 .RoomWrapper {
 	display: flex;
 	flex-direction: column;
 	position: absolute;
-	inset: 0px;
-}
-
-.RoomWrapper-header {
-	display: flex;
-	flex-direction: row;
-	justify-content: flex-start;
-	align-items: center;
-	padding: 8px 16px;
-	gap: 16px;
-	background: var(--background);
-	border-bottom: 1px solid var(--gray-dark);
-	color: var(--text);
-	font-size: 14px;
-}
-
-.RoomWrapper-copy {
-	background: var(--black-transparent-lighter);
-	border: 1px solid var(--gray-dark);
-	border-radius: 4px;
-	padding: 4px 12px;
-	height: 24px;
-	cursor: pointer;
-	position: relative;
-	text-align: center;
-}
-
-.RoomWrapper-copy:has(.RoomWrapper-copied) {
-	color: transparent;
-}
-
-.RoomWrapper-copied {
-	color: var(--text);
-	position: absolute;
 	inset: 0;
-	display: flex;
-	align-items: center;
-	justify-content: center;
+	background: #000;
+	overscroll-behavior: none;
 }
 
-.RoomWrapper-copy:hover {
-	border: 1px solid var(--black-transparent-lighter);
-}
-
-.RoomWrapper-adminBadge {
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
-	color: var(--focus);
-}
-
-.RoomWrapper-adminActions {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin-left: auto;
-}
-
-.RoomWrapper-status {
-	font-size: 12px;
-	color: var(--black-transparent-dark);
+/*
+ * tldraw pads the bottom toolbar with --tl-sab (safe-area only by default).
+ * Fold in the measured Safari/browser chrome inset so tools stay tappable.
+ * Requires viewport-fit=cover for safe-area-inset-* to be non-zero.
+ */
+.tlui-layout {
+	--tl-sab: calc(env(safe-area-inset-bottom, 0px) + var(--browser-chrome-bottom, 0px));
 }
 
 .RoomWrapper-content {
 	position: relative;
 	flex: 1;
+	min-height: 0;
+}
+
+.RoomWrapper-adminBar,
+.RoomWrapper-checkBar {
+	position: absolute;
+	z-index: 500;
+	top: 12px;
+	left: 50%;
+	right: auto;
+	transform: translateX(-50%);
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 8px 10px;
+	border: 1px solid var(--line);
+	background: rgba(10, 10, 10, 0.92);
+	backdrop-filter: blur(8px);
+	max-width: min(520px, calc(100% - 24px));
+	width: fit-content;
+}
+
+.RoomWrapper-checkBar--admin {
+	max-width: min(640px, calc(100% - 24px));
+}
+
+.RoomWrapper-checkBar--user {
+	max-width: min(320px, calc(100% - 24px));
+	padding: 10px 16px;
+}
+
+.RoomWrapper-adminBadge {
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text);
+}
+
+.RoomWrapper-handle {
+	font-size: 12px;
+	color: var(--muted);
+}
+
+.RoomWrapper-userName {
+	font-size: 14px;
+	font-weight: 700;
+	color: var(--text);
+	letter-spacing: 0.01em;
+	text-align: center;
+}
+
+.RoomWrapper-button {
+	appearance: none;
+	border: 1px solid var(--line);
+	background: #1a1a1a;
+	color: var(--text);
+	padding: 6px 10px;
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.RoomWrapper-button:hover {
+	border-color: #555;
+}
+
+.RoomWrapper-status {
+	font-size: 12px;
+	color: var(--muted);
+}
+
+.InstagramGate {
+	position: absolute;
+	inset: 0;
+	z-index: 400;
+	display: grid;
+	place-items: center;
+	padding: 24px;
+	background: rgba(0, 0, 0, 0.35);
+	backdrop-filter: blur(14px);
+	-webkit-backdrop-filter: blur(14px);
+}
+
+.InstagramGate-card {
+	width: min(100%, 320px);
+	padding: 18px 16px;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 12px;
+	background: rgba(18, 18, 18, 0.72);
+	box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.InstagramGate-title {
+	margin: 0 0 4px;
+	font-size: 15px;
+	font-weight: 700;
+}
+
+.InstagramGate-copy {
+	margin: 0 0 14px;
+	color: var(--muted);
+	font-size: 12px;
+	line-height: 1.4;
+}
+
+.InstagramGate-inputRow {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	margin-bottom: 10px;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 8px;
+	background: rgba(0, 0, 0, 0.35);
+	padding: 0 10px;
+}
+
+.InstagramGate-at {
+	color: var(--muted);
+	font-size: 13px;
+}
+
+.InstagramGate-input {
+	flex: 1;
+	border: 0;
+	background: transparent;
+	color: var(--text);
+	font: inherit;
+	font-size: 14px;
+	padding: 10px 0;
+	outline: none;
+}
+
+.InstagramGate-error {
+	margin: 0 0 10px;
+	color: var(--danger);
+	font-size: 12px;
+}
+
+.InstagramGate-submit {
+	width: 100%;
+	appearance: none;
+	border: 0;
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.92);
+	color: #000;
+	font: inherit;
+	font-size: 13px;
+	font-weight: 700;
+	padding: 10px 12px;
+	cursor: pointer;
+}
+
+.InstagramGate-submit:hover {
+	filter: brightness(0.94);
+}
+
+.EntryGate-label {
+	display: block;
+	margin: 0 0 4px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--muted);
+}
+
+.EntryGate-input {
+	width: 100%;
+	box-sizing: border-box;
+	margin: 0 0 12px;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 8px;
+	background: rgba(0, 0, 0, 0.35);
+	color: var(--text);
+	font: inherit;
+	font-size: 14px;
+	padding: 10px 12px;
+	outline: none;
+}
+
+.EntryGate-input:focus {
+	border-color: rgba(255, 255, 255, 0.28);
+}
+
+.RoomWrapper-button--danger {
+	border-color: rgba(220, 80, 80, 0.45);
+	color: #f2b8b8;
+}
+
+.AdminSubmissions {
+	position: relative;
+}
+
+.AdminSubmissions-panel {
+	position: absolute;
+	z-index: 520;
+	top: calc(100% + 8px);
+	left: 50%;
+	right: auto;
+	transform: translateX(-50%);
+	width: min(400px, calc(100vw - 24px));
+	max-height: min(480px, 70vh);
+	overflow: auto;
+	padding: 10px;
+	border: 1px solid var(--line);
+	background: rgba(10, 10, 10, 0.96);
+	backdrop-filter: blur(8px);
+	box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.AdminSubmissions-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 10px;
+}
+
+.AdminSubmissions-tab {
+	appearance: none;
+	border: 1px solid var(--line);
+	background: #151515;
+	color: var(--muted);
+	padding: 6px 10px;
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.AdminSubmissions-tab.is-active {
+	color: var(--text);
+	border-color: #666;
+	background: #222;
+}
+
+.AdminSubmissions-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 8px;
+	font-size: 12px;
+	color: var(--muted);
+}
+
+.AdminSubmissions-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.AdminSubmissions-empty {
+	font-size: 12px;
+	color: var(--muted);
+}
+
+.AdminSubmissions-row {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 8px;
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	background: rgba(255, 255, 255, 0.03);
+}
+
+.AdminSubmissions-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	font-size: 13px;
+}
+
+.AdminSubmissions-sub {
+	font-size: 11px;
+	color: var(--muted);
+}
+
+.AdminSubmissions-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.AdminSubmissions-actions .RoomWrapper-button:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
 }
